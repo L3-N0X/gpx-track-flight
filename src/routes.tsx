@@ -1,6 +1,7 @@
 import { type FC } from "react";
 import { HomePage } from "./pages/home.tsx";
 import { AboutPage } from "./pages/about.tsx";
+import { MapPage } from "./pages/map.tsx";
 
 export interface AppRoute {
   path: string;
@@ -25,6 +26,14 @@ export const routes: AppRoute[] = [
     title: "About",
     description: "Learn more about our mission and what we do.",
     component: AboutPage,
+    showInNavbar: true,
+    category: "main",
+  },
+  {
+    path: "/map",
+    title: "3D Map",
+    description: "Explore the 3D flight map.",
+    component: MapPage,
     showInNavbar: true,
     category: "main",
   },
