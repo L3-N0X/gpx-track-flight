@@ -1,9 +1,10 @@
 {
-  "name": "aquamagica",
+  "name": "gpx-track-flight",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
+    "dev": "concurrently -n \"frontend,backend\" -c \"cyan,magenta\" \"bun run dev:frontend\" \"bun run dev:backend\"",
     "dev:frontend": "bunx vite",
     "dev:backend": "bun --hot run server.ts",
     "build": "tsc -b && bunx --bun vite build",

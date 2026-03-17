@@ -64,7 +64,7 @@ A modern, full-stack boilerplate that combines the speed of Vite and Bun with th
 
 ```bash
 git clone <repository-url>
-cd aquamagica
+cd gpx-track-flight
 ```
 
 2. Install dependencies:
@@ -81,7 +81,7 @@ bun install
 bun run dev:frontend
 ```
 
-This starts the Vite dev server on `http://localhost:5173`
+This starts the Vite dev server on `http://localhost:5174`
 
 **Option 2: Full-stack development**
 
@@ -95,7 +95,7 @@ bun run dev:frontend
 
 The application will be available at:
 
-- Frontend: `http://localhost:5173`
+- Frontend: `http://localhost:5174`
 - Backend API: `http://localhost:3001`
 
 ### Available Scripts
@@ -148,13 +148,13 @@ The theme preference is persisted across sessions.
 1. **Build the Docker image:**
 
 ```bash
-docker build -t aquamagica .
+docker build -t gpx-track-flight .
 ```
 
 2. **Run the container:**
 
 ```bash
-docker run -p 3000:3000 aquamagica
+docker run -p 3000:3000 gpx-track-flight
 ```
 
 The application will be available at `http://localhost:3000`

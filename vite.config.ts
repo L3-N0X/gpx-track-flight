@@ -5,21 +5,21 @@ import react from "@vitejs/plugin-react";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+    plugins: [react(), tailwindcss()],
+    resolve: {
+        alias: {
+            "@": path.resolve(__dirname, "./src"),
+        },
     },
-  },
-  server: {
-    port: 5173, // Default Vite port for consistency
-    proxy: {
-      "/api": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path, // Keep the /api prefix
-      },
+    server: {
+        port: 5174,
+        proxy: {
+            "/api": {
+                target: "http://localhost:3030",
+                changeOrigin: true,
+                secure: false,
+                rewrite: (path) => path,
+            },
+        },
     },
-  },
 });
