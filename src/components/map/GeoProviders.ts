@@ -80,52 +80,58 @@ export class AWSTerrariumElevationProvider extends MapProvider {
 
     return new Promise((resolve, reject) => {
       const image = new Image();
-      image.onload = () => resolve(image);
+      image.crossOrigin = "Anonymous";
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+
+        if (!context) {
+          resolve(image);
+          return;
+        }
+
+        context.drawImage(image, 0, 0);
+        const imageData = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
+        const data = imageData.data;
+
+        // AWS Terrarium: height = (R * 256 + G + B / 256) - 32768
+        // Mapbox: height = (r * 65536 + g * 256 + b) * 0.1 - 10000
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          // Decode
+          const h = r * 256.0 + g + b / 256.0 - 32768.0;
+          
+          // Mountain scale exaggeration (so they don't look tiny from 6km up)
+          const hExaggerated = h * 2.5;
+
+          // Encode to Mapbox
+          const value = Math.max(0, (hExaggerated + 10000) * 10);
+          data[i] = Math.floor(value / 65536);
+          data[i + 1] = Math.floor((value % 65536) / 256);
+          data[i + 2] = Math.floor(value % 256);
+          // alpha is data[i + 3] = 255 which is already set
+        }
+
+        context.putImageData(imageData, 0, 0);
+        resolve(canvas);
+      };
       image.onerror = () => {
         console.error(
           `AWSTerrariumElevationProvider Failed to load tile: ${url}`,
         );
         reject();
       };
-      image.crossOrigin = "Anonymous";
       image.src = url;
     });
-  }
-
-  public elevationData(
-    image: HTMLImageElement | HTMLCanvasElement | ImageBitmap,
-  ): Float32Array {
-    let canvas: HTMLCanvasElement;
-    if (image instanceof HTMLCanvasElement) {
-      canvas = image;
-    } else {
-      canvas = document.createElement("canvas");
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const context = canvas.getContext("2d");
-      if (context) {
-        // Ignore the typescript error if drawing ImageBitmap, context.drawImage supports it.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        context.drawImage(image as any, 0, 0);
-      }
-    }
-
-    const context = canvas.getContext("2d");
-    const imageData = context?.getImageData(0, 0, canvas.width, canvas.height);
-
-    const size = canvas.width * canvas.height;
-    const data = new Float32Array(size);
-
-    if (imageData) {
-      // Terrarium format: height = (red * 256 + green + blue / 256) - 32768
-      for (let i = 0; i < size; i++) {
-        const r = imageData.data[i * 4];
-        const g = imageData.data[i * 4 + 1];
-        const b = imageData.data[i * 4 + 2];
-        data[i] = r * 256.0 + g + b / 256.0 - 32768.0;
-      }
-    }
-
-    return data;
   }
 }

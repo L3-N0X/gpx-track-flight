@@ -1,13 +1,24 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { TileMap } from "./TileMap";
 import { MapControls } from "./MapControls";
+
+// Coordinate display removed to simplify components
+function CoordinateUpdater() {
+  useFrame(({ camera }) => {
+    const el = document.getElementById("coordinate-display");
+    if (el) {
+      el.innerText = `Camera XYZ: ${Math.round(camera.position.x)}, ${Math.round(camera.position.y)}, ${Math.round(camera.position.z)}\nRot: ${(camera.rotation.x * 180 / Math.PI).toFixed(1)}°, ${(camera.rotation.y * 180 / Math.PI).toFixed(1)}°, ${(camera.rotation.z * 180 / Math.PI).toFixed(1)}°`;
+    }
+  });
+  return null;
+}
 
 export function Map3D() {
   return (
     <div className="absolute inset-0 bg-slate-900 overflow-hidden">
       <Canvas
         camera={{
-          position: [0, 4000, 0], // Start high up
+          position: [0, 6000, 0], // Start high up above the mountains
           fov: 60,
           near: 10,
           far: 1e9, // Very far draw distance required for Earth-scale maps
@@ -25,11 +36,16 @@ export function Map3D() {
         <TileMap />
 
         {/* 
-                  Using a custom WASD MapControls component or PointerLock.
-                  For now we will implement simple WASD-like controls. 
-                */}
+          Using a custom WASD MapControls component or PointerLock.
+          For now we will implement simple WASD-like controls. 
+        */}
         <MapControls />
+        <CoordinateUpdater />
       </Canvas>
+
+      <div className="absolute top-4 right-4 bg-background/80 backdrop-blur-sm p-4 rounded-md text-sm border border-border font-mono whitespace-pre-line" id="coordinate-display">
+        Camera XYZ: Loading...
+      </div>
 
       <div className="absolute bottom-4 left-4 bg-background/80 backdrop-blur-sm p-4 rounded-md text-sm border border-border">
         <p className="font-semibold mb-2">Controls</p>

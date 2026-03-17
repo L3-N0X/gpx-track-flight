@@ -4,7 +4,7 @@ import { Vector3, Euler } from "three";
 
 const MOVEMENT_SPEED = 1000; // Base speed
 const BOOST_MULTIPLIER = 10;
-const ROTATION_SPEED = 0.002;
+const ROTATION_SPEED = 0.003;
 
 export function MapControls() {
   const { camera, gl } = useThree();
@@ -17,7 +17,9 @@ export function MapControls() {
   const velocity = useRef(new Vector3());
 
   useEffect(() => {
-    // Initialize euler based on initial camera rotation
+    // Initialize euler based on initial camera rotation,
+    // looking down 60 degrees by default so the map is instantly visible
+    camera.quaternion.setFromEuler(new Euler(-Math.PI / 3, 0, 0, "YXZ"));
     euler.current.setFromQuaternion(camera.quaternion);
 
     const handleKeyDown = (e: KeyboardEvent) => {
