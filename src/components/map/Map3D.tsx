@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { UnitsUtils } from "geo-three";
@@ -7,9 +7,11 @@ import { MapControls } from "./MapControls";
 import { Track } from "./Track";
 import { INITIAL_COORDS } from "../../lib/constants";
 import { parseGpx } from "../../lib/gpxParser";
+import { computeGpxStats } from "../../lib/gpxStats";
 import { DroneFlightProvider } from "../../contexts/DroneFlightContext";
 import { DroneFlightControls } from "./DroneFlightControls";
 import { DroneCamera } from "./DroneCamera";
+import { GpxStatsOverlay } from "./GpxStatsOverlay";
 
 
 
@@ -70,6 +72,16 @@ function ControlsOverlay() {
 }
 
 export function Map3D({ gpxContent }: { gpxContent?: string }) {
+  const gpxStats = useMemo(() => {
+    if (!gpxContent) return null;
+    try {
+      const parsed = parseGpx(gpxContent);
+      return computeGpxStats(parsed.name, parsed.points);
+    } catch {
+      return null;
+    }
+  }, [gpxContent]);
+
   return (
     <DroneFlightProvider>
       <div className="absolute inset-0 bg-slate-900 overflow-hidden">
@@ -109,6 +121,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
           <DroneCamera />
         </Canvas>
 
+        {gpxStats && <GpxStatsOverlay stats={gpxStats} />}
         <ControlsOverlay />
         <DroneFlightControls />
       </div>

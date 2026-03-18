@@ -1,14 +1,10 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { UnitsUtils } from "geo-three";
 import { parseGpx } from "../../lib/gpxParser";
-import {
-  Vector3,
-  CatmullRomCurve3,
-  Raycaster,
-  Mesh,
-  Group,
-  type Intersection,
-} from "three";
+import { computeGpxStats } from "../../lib/gpxStats";
+import { Html } from "@react-three/drei";
+import * as THREE from "three";
+import { Vector3, CatmullRomCurve3, Raycaster, Mesh, Group, type Intersection } from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { INITIAL_COORDS } from "../../lib/constants";
 import { useDroneFlight } from "../../contexts/DroneFlightContext";
@@ -18,6 +14,8 @@ interface SnapPoint {
   y: number;
   z: number;
   resolved: boolean;
+  speed: number;
+  originalIndex: number;
 }
 
 export function Track({ gpxContent }: { gpxContent: string }) {
@@ -30,9 +28,11 @@ export function Track({ gpxContent }: { gpxContent: string }) {
       let lastPoint: Vector3 | null = null;
       // Filter points to ensure minimum distance (e.g. 10 units = approx 10 meters in Web Mercator)
       // Reduced to 10 to preserve corners better, applying smoothing later instead
+      const stats = computeGpxStats(gpxData.name, gpxData.points);
       const MIN_DISTANCE = 10;
 
-      for (const pt of gpxData.points) {
+      for (let i = 0; i < gpxData.points.length; i++) {
+        const pt = gpxData.points[i];
         const spherical = UnitsUtils.datumsToSpherical(pt.lat, pt.lon);
         const currentVec = new Vector3(spherical.x, 0, -spherical.y);
 
@@ -43,6 +43,8 @@ export function Track({ gpxContent }: { gpxContent: string }) {
             y: Math.max(pt.ele + 1000, 4000),
             z: -spherical.y,
             resolved: false,
+            speed: stats.pointSpeeds[i] || 0,
+            originalIndex: i,
           });
           lastPoint = currentVec;
         }
@@ -51,10 +53,7 @@ export function Track({ gpxContent }: { gpxContent: string }) {
       // Ensure we always add the very last point so the track doesn't end abruptly
       const lastGpxPt = gpxData.points[gpxData.points.length - 1];
       if (lastGpxPt) {
-        const spherical = UnitsUtils.datumsToSpherical(
-          lastGpxPt.lat,
-          lastGpxPt.lon,
-        );
+        const spherical = UnitsUtils.datumsToSpherical(lastGpxPt.lat, lastGpxPt.lon);
         const lastVec = new Vector3(spherical.x, 0, -spherical.y);
         if (lastPoint && lastPoint.distanceTo(lastVec) > 0.1) {
           vecPoints.push({
@@ -62,6 +61,8 @@ export function Track({ gpxContent }: { gpxContent: string }) {
             y: Math.max(lastGpxPt.ele + 1000, 4000),
             z: -spherical.y,
             resolved: false,
+            speed: stats.pointSpeeds[stats.pointSpeeds.length - 1] || 0,
+            originalIndex: gpxData.points.length - 1,
           });
         }
       }
@@ -69,10 +70,11 @@ export function Track({ gpxContent }: { gpxContent: string }) {
       return {
         name: gpxData.name,
         points: vecPoints,
+        stats,
       };
     } catch (err) {
       console.error("Failed to parse GPX data", err);
-      return { name: "", points: [] };
+      return { name: "", points: [], stats: null };
     }
   }, [gpxContent]);
 
@@ -91,9 +93,7 @@ export function Track({ gpxContent }: { gpxContent: string }) {
     if (pointsRef.current.length === 0) return;
 
     // Find the terrain group by name (set in TileMap)
-    const tileMapGroup = scene.getObjectByName("TileMapGroup") as
-      | Group
-      | undefined;
+    const tileMapGroup = scene.getObjectByName("TileMapGroup") as Group | undefined;
     if (!tileMapGroup) return;
 
     let pointsChanged = false;
@@ -151,10 +151,16 @@ export function Track({ gpxContent }: { gpxContent: string }) {
     }
   });
 
-  const { curve, firstPoint, isFullyResolved } = useMemo(() => {
+  const trackData = useMemo(() => {
     if (points.length < 2)
-      return { curve: null, firstPoint: null, isFullyResolved: false };
-
+      return {
+        curve: null,
+        firstPoint: null,
+        isFullyResolved: false,
+        highestPoint: null,
+        fastestPoint: null,
+        maxSpeed: null,
+      };
     let vec3s = points.map((p) => new Vector3(p.x, p.y, p.z));
     const isFullyResolved = points.every((p) => p.resolved);
 
@@ -177,12 +183,39 @@ export function Track({ gpxContent }: { gpxContent: string }) {
       vec3s = smoothed;
     }
 
+    // Identify markers
+    let highestPoint: Vector3 | null = null;
+    let fastestPoint: Vector3 | null = null;
+    let maxSpeed = -Infinity;
+
+    if (initialData.stats) {
+      const stats = initialData.stats;
+      points.forEach((p, idx) => {
+        // We use the smoothed position if possible, rough mapping
+        const mappedIdx = Math.min(idx, vec3s.length - 1);
+        const pos = vec3s[mappedIdx];
+
+        if (p.originalIndex === stats.highestPointIndex) {
+          highestPoint = pos;
+        }
+        if (p.originalIndex === stats.fastestPointIndex) {
+          fastestPoint = pos;
+          maxSpeed = stats.maxSpeedKmh || p.speed;
+        }
+      });
+    }
+
     return {
       curve: new CatmullRomCurve3(vec3s),
       firstPoint: vec3s[0],
       isFullyResolved,
+      highestPoint: highestPoint as Vector3 | null,
+      fastestPoint: fastestPoint as Vector3 | null,
+      maxSpeed,
     };
-  }, [points]);
+  }, [points, initialData.stats]);
+
+  const { curve, firstPoint, isFullyResolved, highestPoint, fastestPoint, maxSpeed } = trackData;
 
   // Pass generated curve to global state only once resolved
   useEffect(() => {
@@ -191,22 +224,121 @@ export function Track({ gpxContent }: { gpxContent: string }) {
     }
   }, [curve, isFullyResolved, curveRef]);
 
+  // Update vertex colors
+  const tubeRef = useRef<Mesh>(null);
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  useEffect(() => {
+    if (
+      !tubeRef.current ||
+      !materialRef.current ||
+      !curve ||
+      !initialData.stats ||
+      !isFullyResolved
+    )
+      return;
+
+    const geometry = tubeRef.current.geometry;
+    if (!geometry) return;
+
+    // Get colors for each segment based on speed
+    const colors: number[] = [];
+    const colorObj = new THREE.Color();
+
+    // The number of tubular segments we defined
+    const tubularSegments = Math.max(points.length * 3, 200);
+    // Add 1 to radialSegments because the vertices wrap around (8 segments = 9 vertices)
+    const radialSegments = 8 + 1;
+
+    // We use a small minimum speed so colors don't hit 0 division, but allow low speed coloring
+    const trackMaxSpeed = initialData.stats.maxSpeedKmh || 30;
+
+    for (let i = 0; i <= tubularSegments; i++) {
+      // Map t (0 to 1) to our original points array
+      const t = i / tubularSegments;
+      const ptIndex = Math.min(Math.floor(t * points.length), points.length - 1);
+
+      const speed = points[ptIndex].speed || 0;
+
+      // Map speed to color (green to red)
+      // Ratio: 0 = very slow (green), 1 = max speed (red)
+      const ratio = Math.min(Math.max(speed / trackMaxSpeed, 0), 1);
+
+      // HSL interpolation: Green hue is ~0.33, Red hue is 0.0
+      // Calculate hue: 0.33 * (1 - ratio) gives Green->Red transition as speed increases
+      colorObj.setHSL(0.33 * (1 - ratio), 0.8, 0.5, THREE.SRGBColorSpace);
+
+      // For each radial segment at this tubular location, add the same color
+      for (let j = 0; j < radialSegments; j++) {
+        colors.push(colorObj.r, colorObj.g, colorObj.b);
+      }
+    }
+
+    // Store colors in geometry
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    // Important: Tell Three.js the attributes need to be sent to GPU
+    geometry.attributes.color.needsUpdate = true;
+    if (materialRef.current) materialRef.current.needsUpdate = true; // Ensure material recompiles with vertex colors
+  }, [curve, points, initialData.stats, isFullyResolved]);
+
   if (!curve || !firstPoint) return null;
 
   return (
     <group>
       <DroneShape />
-      <mesh>
+      <mesh ref={tubeRef}>
         {/* Adjusted radius to 8 to avoid self-intersection on corners, and increased segments for smoothness */}
-        <tubeGeometry
-          args={[curve, Math.max(points.length * 3, 200), 8, 8, false]}
-        />
+        <tubeGeometry args={[curve, Math.max(points.length * 3, 200), 8, 8, false]} />
         <meshStandardMaterial
-          color={isFullyResolved ? "#8bec7a" : "#faca84"} // yellow-600 while snapping, green when done
+          ref={materialRef}
+          // Base color must be fully white (#ffffff) to show vertex colors correctly.
+          // If this is set to anything else, the colors get mixed.
+          color="#ffffff"
+          vertexColors={isFullyResolved}
           roughness={0.7}
           metalness={0.1}
         />
       </mesh>
+
+      {/* Markers */}
+      {isFullyResolved && initialData.stats?.highestPointIndex !== null && highestPoint && (
+        <group position={[highestPoint.x, highestPoint.y + 100, highestPoint.z]}>
+          {/* Line down to track */}
+          <mesh position={[0, -50, 0]}>
+            <cylinderGeometry args={[2, 2, 100]} />
+            <meshBasicMaterial color="#ffffff" />
+          </mesh>
+          <Html center className="pointer-events-none">
+            <div className="flex flex-col items-center drop-shadow-md">
+              <div className="bg-slate-900/80 font-bold text-white px-2 py-1 rounded border border-white/20 whitespace-nowrap mb-1">
+                ⛰️ {initialData.stats?.highestElevationM ?? 0}m
+              </div>
+              <div className="w-3 h-3 bg-white rounded-full border-2 border-slate-500"></div>
+            </div>
+          </Html>
+        </group>
+      )}
+
+      {isFullyResolved &&
+        initialData.stats?.fastestPointIndex !== null &&
+        fastestPoint &&
+        maxSpeed !== null && (
+          <group position={[fastestPoint.x, fastestPoint.y + 100, fastestPoint.z]}>
+            {/* Line down to track */}
+            <mesh position={[0, -50, 0]}>
+              <cylinderGeometry args={[2, 2, 100]} />
+              <meshBasicMaterial color="#ffffff" />
+            </mesh>
+            <Html center className="pointer-events-none">
+              <div className="flex flex-col items-center drop-shadow-md">
+                <div className="bg-slate-900/80 font-bold text-white px-2 py-1 rounded border border-white/20 whitespace-nowrap mb-1">
+                  🚀 {maxSpeed.toFixed(1)} km/h
+                </div>
+                <div className="w-3 h-3 bg-red-500 rounded-full border-2 border-white"></div>
+              </div>
+            </Html>
+          </group>
+        )}
     </group>
   );
 }
@@ -223,11 +355,7 @@ function DroneShape() {
   return (
     <mesh ref={droneRef}>
       <sphereGeometry args={[20, 16, 16]} />
-      <meshStandardMaterial
-        color="#ffffff"
-        emissive="#ff0000"
-        emissiveIntensity={0.8}
-      />
+      <meshStandardMaterial color="#ffffff" emissive="#ff0000" emissiveIntensity={0.8} />
     </mesh>
   );
 }
