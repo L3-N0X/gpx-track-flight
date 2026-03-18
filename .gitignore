@@ -29,3 +29,4 @@ PLAN.md
 run-prod.bat
 test-prod.bat
 .env
+other-files/
