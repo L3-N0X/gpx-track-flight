@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Vector3, Euler } from "three";
+import { Vector3, Euler, Raycaster, Mesh, type Intersection } from "three";
 
 const MOVEMENT_SPEED = 1000; // Base speed
 const BOOST_MULTIPLIER = 10;
 const ROTATION_SPEED = 0.003;
 
 export function MapControls() {
-  const { camera, gl } = useThree();
+  const { camera, gl, scene } = useThree();
 
   // State references for performance (no re-renders on every frame input change)
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -15,6 +15,10 @@ export function MapControls() {
   const euler = useRef(new Euler(0, 0, 0, "YXZ"));
   const direction = useRef(new Vector3()); // Reused vector for movement
   const velocity = useRef(new Vector3());
+  const raycaster = useRef(new Raycaster());
+  const rayOrigin = useRef(new Vector3());
+  const downVector = useRef(new Vector3(0, -1, 0));
+  const hitMarker = useRef<Mesh>(null!);
 
   useEffect(() => {
     // Initialize euler based on initial camera rotation,
@@ -103,7 +107,76 @@ export function MapControls() {
     camera.translateX(direction.current.x);
     camera.translateY(direction.current.y);
     camera.translateZ(direction.current.z);
+
+    // Collision detection
+    const tileMapGroup = scene.getObjectByName("TileMapGroup");
+    if (tileMapGroup) {
+      // Raycast straight down in world space from a very high altitude
+      rayOrigin.current.set(camera.position.x, 100000, camera.position.z);
+      raycaster.current.set(rayOrigin.current, downVector.current);
+
+      // Perform a custom brute-force raycast that ignores object.visible
+      // because geo-three might be hiding meshes in a weird way
+      const allIntersects: Intersection[] = [];
+      tileMapGroup.traverse((child) => {
+        if ((child as Mesh).isMesh && (child as Mesh).geometry) {
+          child.raycast(raycaster.current, allIntersects);
+        }
+      });
+
+      allIntersects.sort((a, b) => a.distance - b.distance);
+
+      if (allIntersects.length > 0) {
+        // Find the first intersection that is actually the terrain
+        const terrainWorldY = allIntersects[0].point.y;
+
+        // Add a padding of 50 units above the terrain
+        const minHeight = terrainWorldY + 50;
+
+        if (hitMarker.current) {
+          hitMarker.current.position.copy(allIntersects[0].point);
+        }
+
+        // Extremely detailed debug log
+        // Run once every 60 frames approx to avoid blowing up the console completely, but guarantee it runs.
+        if (Math.random() < 0.05) {
+          const hitObj = allIntersects[0].object;
+          console.log(
+            "Cam Y:",
+            camera.position.y.toFixed(2),
+            "Hit Y World:",
+            terrainWorldY.toFixed(2),
+            "Hit Obj Name/Type:",
+            hitObj.name,
+            hitObj.type,
+          );
+        }
+
+        if (camera.position.y < minHeight) {
+          camera.position.setY(minHeight);
+        }
+      } else {
+        if (Math.random() < 0.05) {
+          console.log(
+            "Raycaster MISSED terrain entirely! Cam Pos:",
+            camera.position.clone(),
+          );
+        }
+        // Prevent falling into negative void if no tile is loaded yet
+        if (camera.position.y < 20) camera.position.setY(20);
+      }
+    }
   });
 
-  return null;
+  return (
+    <mesh ref={hitMarker}>
+      <sphereGeometry args={[20, 16, 16]} />
+      <meshBasicMaterial
+        color="red"
+        depthTest={false}
+        transparent
+        opacity={0.8}
+      />
+    </mesh>
+  );
 }

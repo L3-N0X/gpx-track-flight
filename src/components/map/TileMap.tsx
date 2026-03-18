@@ -67,8 +67,6 @@ export function TileMap() {
 
     // maxZoom is a property of the provider in geo-three, not the map itself
     colorProvider.maxZoom = MAX_ZOOM;
-    // AWS Terrarium stops providing details around zoom 14-15. Stop fetching height there.
-    elevationProvider.maxZoom = 14;
 
     // Apply custom mesh resolution since we're using MapView.HEIGHT (default is 16)
     // 128 gives a very detailed mesh for the 256x256 altitude tile
@@ -94,7 +92,7 @@ export function TileMap() {
   if (!mapView) return null;
 
   return (
-    <group position={[-INITIAL_COORDS.x, 0, INITIAL_COORDS.y]}>
+    <group position={[-INITIAL_COORDS.x, 0, INITIAL_COORDS.y]} name="TileMapGroup">
       <primitive object={mapView} />
     </group>
   );

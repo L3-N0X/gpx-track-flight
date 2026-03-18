@@ -68,6 +68,7 @@ export class EsriLabelProvider extends MapProvider {
 export class AWSTerrariumElevationProvider extends MapProvider {
   public constructor() {
     super();
+    this.maxZoom = 19;
   }
 
   public fetchTile(
@@ -75,16 +76,30 @@ export class AWSTerrariumElevationProvider extends MapProvider {
     x: number,
     y: number,
   ): Promise<HTMLImageElement | HTMLCanvasElement | ImageBitmap> {
+    const maxDataZoom = 14;
+    let fetchZoom = zoom;
+    let fetchX = x;
+    let fetchY = y;
+    
+    if (zoom > maxDataZoom) {
+      const zoomDiff = zoom - maxDataZoom;
+      fetchZoom = maxDataZoom;
+      fetchX = Math.floor(x / Math.pow(2, zoomDiff));
+      fetchY = Math.floor(y / Math.pow(2, zoomDiff));
+    }
+
     // AWS Elevation Tiles: s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png
-    const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${x}/${y}.png`;
+    const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${fetchZoom}/${fetchX}/${fetchY}.png`;
 
     return new Promise((resolve, reject) => {
       const image = new Image();
       image.crossOrigin = "Anonymous";
       image.onload = () => {
         const canvas = document.createElement("canvas");
-        canvas.width = image.width;
-        canvas.height = image.height;
+        const ctxWidth = 256;
+        const ctxHeight = 256;
+        canvas.width = ctxWidth;
+        canvas.height = ctxHeight;
         const context = canvas.getContext("2d", { willReadFrequently: true });
 
         if (!context) {
@@ -92,7 +107,24 @@ export class AWSTerrariumElevationProvider extends MapProvider {
           return;
         }
 
-        context.drawImage(image, 0, 0);
+        context.imageSmoothingEnabled = false;
+
+        if (zoom > maxDataZoom) {
+          const zoomDiff = zoom - maxDataZoom;
+          const power = Math.pow(2, zoomDiff);
+          const cropSize = image.width / power;
+          const offsetX = (x % power) * cropSize;
+          const offsetY = (y % power) * cropSize;
+          
+          context.drawImage(
+            image, 
+            offsetX, offsetY, cropSize, cropSize, 
+            0, 0, ctxWidth, ctxHeight
+          );
+        } else {
+          context.drawImage(image, 0, 0, ctxWidth, ctxHeight);
+        }
+
         const imageData = context.getImageData(
           0,
           0,
