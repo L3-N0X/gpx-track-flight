@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { UnitsUtils } from "geo-three";
 import { parseGpx } from "../../lib/gpxParser";
 import {
@@ -11,6 +11,7 @@ import {
 } from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { INITIAL_COORDS } from "../../lib/constants";
+import { useDroneFlight } from "../../contexts/DroneFlightContext";
 
 interface SnapPoint {
   x: number;
@@ -50,7 +51,10 @@ export function Track({ gpxContent }: { gpxContent: string }) {
       // Ensure we always add the very last point so the track doesn't end abruptly
       const lastGpxPt = gpxData.points[gpxData.points.length - 1];
       if (lastGpxPt) {
-        const spherical = UnitsUtils.datumsToSpherical(lastGpxPt.lat, lastGpxPt.lon);
+        const spherical = UnitsUtils.datumsToSpherical(
+          lastGpxPt.lat,
+          lastGpxPt.lon,
+        );
         const lastVec = new Vector3(spherical.x, 0, -spherical.y);
         if (lastPoint && lastPoint.distanceTo(lastVec) > 0.1) {
           vecPoints.push({
@@ -72,6 +76,7 @@ export function Track({ gpxContent }: { gpxContent: string }) {
     }
   }, [gpxContent]);
 
+  const { curveRef } = useDroneFlight();
   const [points, setPoints] = useState<SnapPoint[]>(initialData.points);
   const pointsRef = useRef<SnapPoint[]>(initialData.points);
   const checkIndex = useRef(0);
@@ -179,13 +184,23 @@ export function Track({ gpxContent }: { gpxContent: string }) {
     };
   }, [points]);
 
+  // Pass generated curve to global state only once resolved
+  useEffect(() => {
+    if (curve && isFullyResolved) {
+      curveRef.current = curve;
+    }
+  }, [curve, isFullyResolved, curveRef]);
+
   if (!curve || !firstPoint) return null;
 
   return (
     <group>
+      <DroneShape />
       <mesh>
         {/* Adjusted radius to 8 to avoid self-intersection on corners, and increased segments for smoothness */}
-        <tubeGeometry args={[curve, Math.max(points.length * 3, 200), 8, 8, false]} />
+        <tubeGeometry
+          args={[curve, Math.max(points.length * 3, 200), 8, 8, false]}
+        />
         <meshStandardMaterial
           color={isFullyResolved ? "#8bec7a" : "#faca84"} // yellow-600 while snapping, green when done
           roughness={0.7}
@@ -193,5 +208,26 @@ export function Track({ gpxContent }: { gpxContent: string }) {
         />
       </mesh>
     </group>
+  );
+}
+
+function DroneShape() {
+  const { curveRef, progressRef } = useDroneFlight();
+  const droneRef = useRef<Mesh>(null);
+
+  useFrame(() => {
+    if (!droneRef.current || !curveRef.current) return;
+    curveRef.current.getPointAt(progressRef.current, droneRef.current.position);
+  });
+
+  return (
+    <mesh ref={droneRef}>
+      <sphereGeometry args={[20, 16, 16]} />
+      <meshStandardMaterial
+        color="#ffffff"
+        emissive="#ff0000"
+        emissiveIntensity={0.8}
+      />
+    </mesh>
   );
 }

@@ -1,22 +1,17 @@
-import { useEffect } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useState } from "react";
+import { ChevronUp, ChevronDown } from "lucide-react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { UnitsUtils } from "geo-three";
 import { TileMap } from "./TileMap";
 import { MapControls } from "./MapControls";
 import { Track } from "./Track";
 import { INITIAL_COORDS } from "../../lib/constants";
 import { parseGpx } from "../../lib/gpxParser";
+import { DroneFlightProvider } from "../../contexts/DroneFlightContext";
+import { DroneFlightControls } from "./DroneFlightControls";
+import { DroneCamera } from "./DroneCamera";
 
-// Coordinate display removed to simplify components
-function CoordinateUpdater() {
-  useFrame(({ camera }) => {
-    const el = document.getElementById("coordinate-display");
-    if (el) {
-      el.innerText = `Camera XYZ: ${Math.round(camera.position.x)}, ${Math.round(camera.position.y)}, ${Math.round(camera.position.z)}\nRot: ${(camera.rotation.x * 180 / Math.PI).toFixed(1)}°, ${(camera.rotation.y * 180 / Math.PI).toFixed(1)}°, ${(camera.rotation.z * 180 / Math.PI).toFixed(1)}°`;
-    }
-  });
-  return null;
-}
+
 
 function CameraSetup({ gpxContent }: { gpxContent?: string }) {
   const { camera } = useThree();
@@ -46,52 +41,20 @@ function CameraSetup({ gpxContent }: { gpxContent?: string }) {
   return null;
 }
 
-export function Map3D({ gpxContent }: { gpxContent?: string }) {
+function ControlsOverlay() {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <div className="absolute inset-0 bg-slate-900 overflow-hidden">
-      <Canvas
-        camera={{
-          position: [0, 6000, 0], // Start high up above the mountains
-          fov: 60,
-          near: 10,
-          far: 1e9, // Very far draw distance required for Earth-scale maps
-        }}
+    <div className="absolute bottom-4 right-4 bg-background/80 backdrop-blur-sm p-4 rounded-md text-sm border border-border pointer-events-auto">
+      <div 
+        className="flex items-center justify-between cursor-pointer font-semibold gap-4 select-none text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
       >
-        <CameraSetup gpxContent={gpxContent} />
-        
-        {/* Basic lighting */}
-        <ambientLight intensity={0.5} />
-        <directionalLight
-          position={[1000, 2000, 1000]}
-          intensity={1.5}
-          castShadow
-        />
-
-        {/* The terrain map */}
-        <TileMap />
-        
-        {/* Render the Track shifted correctly relative to the world center */}
-        {gpxContent && (
-          <group position={[-INITIAL_COORDS.x, 0, INITIAL_COORDS.y]}>
-            <Track key={gpxContent} gpxContent={gpxContent} />
-          </group>
-        )}
-
-        {/* 
-          Using a custom WASD MapControls component or PointerLock.
-          For now we will implement simple WASD-like controls. 
-        */}
-        <MapControls />
-        <CoordinateUpdater />
-      </Canvas>
-
-      <div className="absolute top-4 right-4 bg-background/80 backdrop-blur-sm p-4 rounded-md text-sm border border-border font-mono whitespace-pre-line pointer-events-none" id="coordinate-display">
-        Camera XYZ: Loading...
+        <span>Controls</span>
+        {isOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
       </div>
-
-      <div className="absolute bottom-4 left-4 bg-background/80 backdrop-blur-sm p-4 rounded-md text-sm border border-border pointer-events-none">
-        <p className="font-semibold mb-2">Controls</p>
-        <ul className="space-y-1 text-muted-foreground">
+      {isOpen && (
+        <ul className="space-y-1 text-muted-foreground mt-3">
           <li><kbd className="bg-muted px-1 rounded">W</kbd> Forward</li>
           <li><kbd className="bg-muted px-1 rounded">S</kbd> Backward</li>
           <li><kbd className="bg-muted px-1 rounded">A</kbd> Left</li>
@@ -101,7 +64,54 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
           <li><kbd className="bg-muted px-1 rounded">Shift</kbd> Speed Boost</li>
           <li><kbd className="bg-muted px-1 rounded">Click + Drag</kbd> Look Around</li>
         </ul>
-      </div>
+      )}
     </div>
+  );
+}
+
+export function Map3D({ gpxContent }: { gpxContent?: string }) {
+  return (
+    <DroneFlightProvider>
+      <div className="absolute inset-0 bg-slate-900 overflow-hidden">
+        <Canvas
+          camera={{
+            position: [0, 6000, 0], // Start high up above the mountains
+            fov: 60,
+            near: 10,
+            far: 1e9, // Very far draw distance required for Earth-scale maps
+          }}
+        >
+          <CameraSetup gpxContent={gpxContent} />
+          
+          {/* Basic lighting */}
+          <ambientLight intensity={0.5} />
+          <directionalLight
+            position={[1000, 2000, 1000]}
+            intensity={1.5}
+            castShadow
+          />
+
+          {/* The terrain map */}
+          <TileMap />
+          
+          {/* Render the Track shifted correctly relative to the world center */}
+          {gpxContent && (
+            <group position={[-INITIAL_COORDS.x, 0, INITIAL_COORDS.y]}>
+              <Track key={gpxContent} gpxContent={gpxContent} />
+            </group>
+          )}
+
+          {/* 
+            Using a custom WASD MapControls component or PointerLock.
+            For now we will implement simple WASD-like controls. 
+          */}
+          <MapControls />
+          <DroneCamera />
+        </Canvas>
+
+        <ControlsOverlay />
+        <DroneFlightControls />
+      </div>
+    </DroneFlightProvider>
   );
 }

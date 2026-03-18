@@ -18,7 +18,7 @@ export function MapControls() {
   const raycaster = useRef(new Raycaster());
   const rayOrigin = useRef(new Vector3());
   const downVector = useRef(new Vector3(0, -1, 0));
-  const hitMarker = useRef<Mesh>(null!);
+
 
   useEffect(() => {
     // Initialize euler based on initial camera rotation,
@@ -133,10 +133,6 @@ export function MapControls() {
         // Add a padding of 50 units above the terrain
         const minHeight = terrainWorldY + 50;
 
-        if (hitMarker.current) {
-          hitMarker.current.position.copy(allIntersects[0].point);
-        }
-
         // Extremely detailed debug log
         // Run once every 60 frames approx to avoid blowing up the console completely, but guarantee it runs.
         if (Math.random() < 0.05) {
@@ -168,15 +164,5 @@ export function MapControls() {
     }
   });
 
-  return (
-    <mesh ref={hitMarker}>
-      <sphereGeometry args={[20, 16, 16]} />
-      <meshBasicMaterial
-        color="red"
-        depthTest={false}
-        transparent
-        opacity={0.8}
-      />
-    </mesh>
-  );
+  return null;
 }
