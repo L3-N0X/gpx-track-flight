@@ -25,16 +25,43 @@ export function Track({ gpxContent }: { gpxContent: string }) {
   const initialData = useMemo(() => {
     try {
       const gpxData = parseGpx(gpxContent);
-      const vecPoints = gpxData.points.map((pt) => {
+      const vecPoints: SnapPoint[] = [];
+      let lastPoint: Vector3 | null = null;
+      // Filter points to ensure minimum distance (e.g. 10 units = approx 10 meters in Web Mercator)
+      // Reduced to 10 to preserve corners better, applying smoothing later instead
+      const MIN_DISTANCE = 10;
+
+      for (const pt of gpxData.points) {
         const spherical = UnitsUtils.datumsToSpherical(pt.lat, pt.lon);
-        return {
-          x: spherical.x,
-          // Start the point way up in the sky so it's always visible before snapping
-          y: Math.max(pt.ele + 1000, 4000),
-          z: -spherical.y,
-          resolved: false,
-        };
-      });
+        const currentVec = new Vector3(spherical.x, 0, -spherical.y);
+
+        if (!lastPoint || lastPoint.distanceTo(currentVec) >= MIN_DISTANCE) {
+          vecPoints.push({
+            x: spherical.x,
+            // Start the point way up in the sky so it's always visible before snapping
+            y: Math.max(pt.ele + 1000, 4000),
+            z: -spherical.y,
+            resolved: false,
+          });
+          lastPoint = currentVec;
+        }
+      }
+
+      // Ensure we always add the very last point so the track doesn't end abruptly
+      const lastGpxPt = gpxData.points[gpxData.points.length - 1];
+      if (lastGpxPt) {
+        const spherical = UnitsUtils.datumsToSpherical(lastGpxPt.lat, lastGpxPt.lon);
+        const lastVec = new Vector3(spherical.x, 0, -spherical.y);
+        if (lastPoint && lastPoint.distanceTo(lastVec) > 0.1) {
+          vecPoints.push({
+            x: spherical.x,
+            y: Math.max(lastGpxPt.ele + 1000, 4000),
+            z: -spherical.y,
+            resolved: false,
+          });
+        }
+      }
+
       return {
         name: gpxData.name,
         points: vecPoints,
@@ -71,33 +98,34 @@ export function Track({ gpxContent }: { gpxContent: string }) {
     while (checks < 10 && checkIndex.current < pointsRef.current.length) {
       const idx = checkIndex.current;
       const pt = pointsRef.current[idx];
+      checks++;
 
-      if (!pt.resolved) {
-        checks++;
+      // Raycast down from high up in world coordinates
+      // The track is inside a shifted group, so its world coordinate is (local.x - shift.x)
+      const worldX = pt.x - INITIAL_COORDS.x;
+      const worldZ = pt.z + INITIAL_COORDS.y;
 
-        // Raycast down from high up in world coordinates
-        // The track is inside a shifted group, so its world coordinate is (local.x - shift.x)
-        const worldX = pt.x - INITIAL_COORDS.x;
-        const worldZ = pt.z + INITIAL_COORDS.y;
+      worldOrigin.current.set(worldX, 15000, worldZ);
+      raycaster.current.set(worldOrigin.current, downVector.current);
 
-        worldOrigin.current.set(worldX, 15000, worldZ);
-        raycaster.current.set(worldOrigin.current, downVector.current);
+      const intersects: Intersection[] = [];
+      // Traverse geo-three tiles, ONLY visible nodes to avoid hidden LOD meshes
+      tileMapGroup.traverseVisible((child) => {
+        if ((child as Mesh).isMesh && (child as Mesh).geometry) {
+          child.raycast(raycaster.current, intersects);
+        }
+      });
 
-        const intersects: Intersection[] = [];
-        // Traverse geo-three tiles
-        tileMapGroup.traverse((child) => {
-          if ((child as Mesh).isMesh && (child as Mesh).geometry) {
-            child.raycast(raycaster.current, intersects);
-          }
-        });
+      if (intersects.length > 0) {
+        intersects.sort((a, b) => a.distance - b.distance);
+        const terrainY = intersects[0].point.y;
+        const targetY = terrainY + 20; // Float 20m above terrain to clear the bumpy map meshes
 
-        if (intersects.length > 0) {
-          intersects.sort((a, b) => a.distance - b.distance);
-          const terrainY = intersects[0].point.y;
-
+        // Continually adapt to more accurate LOD levels loaded over time
+        if (!pt.resolved || Math.abs(pt.y - targetY) > 2) {
           pointsRef.current[idx] = {
             ...pt,
-            y: terrainY + 20, // Float 20m above terrain to clear the bumpy map meshes
+            y: targetY,
             resolved: true,
           };
           pointsChanged = true;
@@ -122,8 +150,27 @@ export function Track({ gpxContent }: { gpxContent: string }) {
     if (points.length < 2)
       return { curve: null, firstPoint: null, isFullyResolved: false };
 
-    const vec3s = points.map((p) => new Vector3(p.x, p.y, p.z));
+    let vec3s = points.map((p) => new Vector3(p.x, p.y, p.z));
     const isFullyResolved = points.every((p) => p.resolved);
+
+    // Apply Laplacian smoothing to the points to eliminate jagged corners and sudden Y-jumps.
+    // This prevents the TubeGeometry from folding/pinching on itself at sharp turns while preserving the overall track shape.
+    const SMOOTHING_PASSES = 1;
+    for (let pass = 0; pass < SMOOTHING_PASSES; pass++) {
+      const smoothed = [vec3s[0]]; // Keep first point fixed
+      for (let i = 1; i < vec3s.length - 1; i++) {
+        // Weighed moving average: original point keeps 50% weight, neighbors 25% each
+        // This is less aggressive than a plain divideScalar(3) average
+        const avg = new Vector3()
+          .copy(vec3s[i])
+          .multiplyScalar(0.5)
+          .add(vec3s[i - 1].clone().multiplyScalar(0.25))
+          .add(vec3s[i + 1].clone().multiplyScalar(0.25));
+        smoothed.push(avg);
+      }
+      smoothed.push(vec3s[vec3s.length - 1]); // Keep last point fixed
+      vec3s = smoothed;
+    }
 
     return {
       curve: new CatmullRomCurve3(vec3s),
@@ -137,7 +184,8 @@ export function Track({ gpxContent }: { gpxContent: string }) {
   return (
     <group>
       <mesh>
-        <tubeGeometry args={[curve, points.length, 12, 8, false]} />
+        {/* Adjusted radius to 8 to avoid self-intersection on corners, and increased segments for smoothness */}
+        <tubeGeometry args={[curve, Math.max(points.length * 3, 200), 8, 8, false]} />
         <meshStandardMaterial
           color={isFullyResolved ? "#8bec7a" : "#faca84"} // yellow-600 while snapping, green when done
           roughness={0.7}
