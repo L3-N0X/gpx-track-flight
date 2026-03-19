@@ -5,6 +5,7 @@ import { Vector3, Euler, Raycaster, Mesh, type Intersection } from "three";
 const MOVEMENT_SPEED = 1000; // Base speed
 const BOOST_MULTIPLIER = 10;
 const ROTATION_SPEED = 0.003;
+const TERRAIN_RAYCAST_INTERVAL_S = 0.12;
 
 export function MapControls() {
   const { camera, gl, scene } = useThree();
@@ -18,6 +19,7 @@ export function MapControls() {
   const raycaster = useRef(new Raycaster());
   const rayOrigin = useRef(new Vector3());
   const downVector = useRef(new Vector3(0, -1, 0));
+  const terrainCheckTimer = useRef(0);
 
 
   useEffect(() => {
@@ -108,17 +110,27 @@ export function MapControls() {
     camera.translateY(direction.current.y);
     camera.translateZ(direction.current.z);
 
-    // Collision detection
+    const isMoving =
+      direction.current.x !== 0 || direction.current.y !== 0 || direction.current.z !== 0;
+
+    terrainCheckTimer.current += delta;
+    if (!isMoving && terrainCheckTimer.current < TERRAIN_RAYCAST_INTERVAL_S) {
+      return;
+    }
+
+    if (terrainCheckTimer.current < TERRAIN_RAYCAST_INTERVAL_S) {
+      return;
+    }
+
+    terrainCheckTimer.current = 0;
+
     const tileMapGroup = scene.getObjectByName("TileMapGroup");
     if (tileMapGroup) {
-      // Raycast straight down in world space from a very high altitude
       rayOrigin.current.set(camera.position.x, 100000, camera.position.z);
       raycaster.current.set(rayOrigin.current, downVector.current);
 
-      // Perform a custom brute-force raycast that ignores object.visible
-      // because geo-three might be hiding meshes in a weird way
       const allIntersects: Intersection[] = [];
-      tileMapGroup.traverse((child) => {
+      tileMapGroup.traverseVisible((child) => {
         if ((child as Mesh).isMesh && (child as Mesh).geometry) {
           child.raycast(raycaster.current, allIntersects);
         }
@@ -127,38 +139,13 @@ export function MapControls() {
       allIntersects.sort((a, b) => a.distance - b.distance);
 
       if (allIntersects.length > 0) {
-        // Find the first intersection that is actually the terrain
         const terrainWorldY = allIntersects[0].point.y;
-
-        // Add a padding of 50 units above the terrain
         const minHeight = terrainWorldY + 50;
-
-        // Extremely detailed debug log
-        // Run once every 60 frames approx to avoid blowing up the console completely, but guarantee it runs.
-        if (Math.random() < 0.05) {
-          const hitObj = allIntersects[0].object;
-          console.log(
-            "Cam Y:",
-            camera.position.y.toFixed(2),
-            "Hit Y World:",
-            terrainWorldY.toFixed(2),
-            "Hit Obj Name/Type:",
-            hitObj.name,
-            hitObj.type,
-          );
-        }
 
         if (camera.position.y < minHeight) {
           camera.position.setY(minHeight);
         }
       } else {
-        if (Math.random() < 0.05) {
-          console.log(
-            "Raycaster MISSED terrain entirely! Cam Pos:",
-            camera.position.clone(),
-          );
-        }
-        // Prevent falling into negative void if no tile is loaded yet
         if (camera.position.y < 20) camera.position.setY(20);
       }
     }

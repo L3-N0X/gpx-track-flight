@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Play, Pause, ChevronDown, ChevronUp } from "lucide-react";
 import { useDroneFlight } from "../../contexts/DroneFlightContext";
 
-export function DroneFlightControls() {
+export function DroneFlightControls({ canPlay }: { canPlay: boolean }) {
   const { isPlaying, setIsPlaying, speed, setSpeed, progressRef } =
     useDroneFlight();
   const [isExpanded, setIsExpanded] = useState(true);
@@ -47,11 +47,16 @@ export function DroneFlightControls() {
             <div className="flex flex-col gap-3 p-2 bg-card rounded-lg border border-border/50">
               <div className="flex justify-center">
                 <button
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  className="flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-md transition-colors w-full"
+                  onClick={() => {
+                    if (canPlay) {
+                      setIsPlaying(!isPlaying);
+                    }
+                  }}
+                  disabled={!canPlay}
+                  className="flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground font-medium py-2 px-6 rounded-md transition-colors w-full disabled:cursor-not-allowed"
                 >
                   {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-                  {isPlaying ? "Pause" : "Play Flight"}
+                  {!canPlay ? "Preparing Flight" : isPlaying ? "Pause" : "Play Flight"}
                 </button>
               </div>
 
