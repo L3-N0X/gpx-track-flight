@@ -228,10 +228,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
 
                     {preparedTrack && (
                         <>
-                            <TileMap
-                                preparedTrack={preparedTrack}
-                                onWarmupChange={setTerrainReady}
-                            />
+                            <TileMap onWarmupChange={setTerrainReady} />
                             <group
                                 position={[
                                     -INITIAL_COORDS.x,

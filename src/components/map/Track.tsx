@@ -58,6 +58,7 @@ export function Track({
     onSamplingStatusChange,
 }: TrackProps) {
     const { curveRef, progressRef } = useDroneFlight()
+
     const [snappedPoints, setSnappedPoints] = useState<SnappedTrackPoint[]>(
         () =>
             preparedTrack.points.map((point) => ({
@@ -68,29 +69,40 @@ export function Track({
     const pointsRef = useRef<SnappedTrackPoint[]>(snappedPoints)
     const [samplingComplete, setSamplingComplete] = useState(false)
 
+    // 1. Keep track of the previous track
+    const [prevTrack, setPrevTrack] = useState(preparedTrack)
+
+    // 2. Adjust STATE during render to avoid cascading re-renders
+    if (preparedTrack !== prevTrack) {
+        const nextPoints = preparedTrack.points.map((point) => ({
+            ...point,
+            resolved: false,
+        }))
+
+        setPrevTrack(preparedTrack)
+        setSnappedPoints(nextPoints)
+        setSamplingComplete(false)
+    }
+
+    // 3. Update REFS and fire CALLBACKS in useEffect
+    // Mutating refs doesn't trigger renders, so this is safe and follows React's rules.
     useEffect(() => {
         const nextPoints = preparedTrack.points.map((point) => ({
             ...point,
             resolved: false,
         }))
+
         pointsRef.current = nextPoints
-        setSnappedPoints(nextPoints)
-        setSamplingComplete(false)
+        curveRef.current = null
+        progressRef.current = 0
+
         onSamplingStatusChange?.({
             sampledPoints: 0,
             totalPoints: nextPoints.length,
             isComplete: false,
             error: null,
         })
-        curveRef.current = null
-        progressRef.current = 0
-    }, [
-        curveRef,
-        onSamplingStatusChange,
-        preparedTrack,
-        progressRef,
-        setSnappedPoints,
-    ])
+    }, [preparedTrack, onSamplingStatusChange, curveRef, progressRef])
 
     useEffect(() => {
         let cancelled = false

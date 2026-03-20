@@ -6,7 +6,6 @@ import {
     MAX_ZOOM,
 } from './GeoProviders'
 import { INITIAL_COORDS } from '../../lib/constants'
-import type { PreparedTrackData } from '../../lib/trackPreparation'
 
 const TERRAIN_GEOMETRY_SEGMENTS = 16
 
@@ -15,14 +14,10 @@ MapNodeGeometry.buildSkirt = function () {
 }
 
 interface TileMapProps {
-    preparedTrack: PreparedTrackData
     onWarmupChange: (ready: boolean) => void
 }
 
-export function TileMap({
-    preparedTrack: _preparedTrack,
-    onWarmupChange,
-}: TileMapProps) {
+export function TileMap({ onWarmupChange }: TileMapProps) {
     const [mapView, setMapView] = useState<MapView | null>(null)
 
     useEffect(() => {
@@ -53,6 +48,7 @@ export function TileMap({
             map.lod.thresholdDown = 0.22
         }
 
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMapView(map)
         onWarmupChange(true)
 
