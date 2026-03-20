@@ -12,7 +12,13 @@ import { GpxStatsOverlay } from "./GpxStatsOverlay";
 import { MapDebugOverlay, type MapDebugMetrics, type TrackSamplingStatus } from "./MapDebugOverlay";
 import { prepareTrackData } from "../../lib/trackPreparation";
 
-function CameraSetup({ hasTrack, firstPoint }: { hasTrack: boolean; firstPoint?: { x: number; y: number; z: number } }) {
+function CameraSetup({
+  hasTrack,
+  firstPoint,
+}: {
+  hasTrack: boolean;
+  firstPoint?: { x: number; y: number; z: number };
+}) {
   const { camera } = useThree();
 
   useEffect(() => {
@@ -44,14 +50,30 @@ function ControlsOverlay() {
       </div>
       {isOpen && (
         <ul className="space-y-1 text-muted-foreground mt-3">
-          <li><kbd className="bg-muted px-1 rounded">W</kbd> Forward</li>
-          <li><kbd className="bg-muted px-1 rounded">S</kbd> Backward</li>
-          <li><kbd className="bg-muted px-1 rounded">A</kbd> Left</li>
-          <li><kbd className="bg-muted px-1 rounded">D</kbd> Right</li>
-          <li><kbd className="bg-muted px-1 rounded">Q</kbd> Down</li>
-          <li><kbd className="bg-muted px-1 rounded">E</kbd> Up</li>
-          <li><kbd className="bg-muted px-1 rounded">Shift</kbd> Speed Boost</li>
-          <li><kbd className="bg-muted px-1 rounded">Click + Drag</kbd> Look Around</li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">W</kbd> Forward
+          </li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">S</kbd> Backward
+          </li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">A</kbd> Left
+          </li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">D</kbd> Right
+          </li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">Q</kbd> Down
+          </li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">E</kbd> Up
+          </li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">Shift</kbd> Speed Boost
+          </li>
+          <li>
+            <kbd className="bg-muted px-1 rounded">Click + Drag</kbd> Look Around
+          </li>
         </ul>
       )}
     </div>
@@ -141,11 +163,14 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
   const [debugMetrics, setDebugMetrics] = useState<MapDebugMetrics | null>(null);
   const [samplingStatus, setSamplingStatus] = useState<TrackSamplingStatus | null>(null);
 
-  useEffect(() => {
+  const [prevTrack, setPrevTrack] = useState(preparedTrack);
+
+  if (preparedTrack !== prevTrack) {
+    setPrevTrack(preparedTrack);
     setTerrainReady(false);
     setTrackReady(false);
     setSamplingStatus(null);
-  }, [preparedTrack]);
+  }
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

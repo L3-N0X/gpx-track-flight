@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapHeightNode, MapNodeGeometry, MapView } from "geo-three";
+import { LODRaycast, MapHeightNode, MapNodeGeometry, MapView } from "geo-three";
 import {
   EsriWorldImageryProvider,
   AWSTerrariumElevationProvider,
@@ -8,30 +8,10 @@ import {
 import { INITIAL_COORDS } from "../../lib/constants";
 import type { PreparedTrackData } from "../../lib/trackPreparation";
 
-const originalBuildSkirt = MapNodeGeometry.buildSkirt;
-MapNodeGeometry.buildSkirt = function (
-  width: number,
-  height: number,
-  widthSegments: number,
-  heightSegments: number,
-  _skirtDepth: number,
-  indices: number[],
-  vertices: number[],
-  normals: number[],
-  uvs: number[],
-) {
-  originalBuildSkirt.call(
-    this,
-    width,
-    height,
-    widthSegments,
-    heightSegments,
-    500.0,
-    indices,
-    vertices,
-    normals,
-    uvs,
-  );
+const TERRAIN_GEOMETRY_SEGMENTS = 16;
+
+MapNodeGeometry.buildSkirt = function () {
+  return;
 };
 
 interface TileMapProps {
@@ -52,13 +32,18 @@ export function TileMap({ preparedTrack: _preparedTrack, onWarmupChange }: TileM
 
     const colorProvider = new EsriWorldImageryProvider(apiKey);
     const elevationProvider = new AWSTerrariumElevationProvider();
+    colorProvider.minZoom = 0;
     colorProvider.maxZoom = MAX_ZOOM;
 
     // @ts-expect-error geo-three leaves this static field out of the published types.
-    MapHeightNode.geometrySize = 64;
+    MapHeightNode.geometrySize = TERRAIN_GEOMETRY_SEGMENTS;
 
     const map = new MapView(MapView.HEIGHT, colorProvider, elevationProvider);
     map.cacheTiles = false;
+    if (map.lod instanceof LODRaycast) {
+      map.lod.thresholdUp = 0.75;
+      map.lod.thresholdDown = 0.22;
+    }
 
     setMapView(map);
     onWarmupChange(true);

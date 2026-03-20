@@ -1,14 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Vector3, Euler, Raycaster, Mesh, type Intersection } from "three";
+import { Vector3, Euler } from "three";
 
 const MOVEMENT_SPEED = 1000; // Base speed
 const BOOST_MULTIPLIER = 10;
 const ROTATION_SPEED = 0.003;
-const TERRAIN_RAYCAST_INTERVAL_S = 0.12;
 
 export function MapControls() {
-  const { camera, gl, scene } = useThree();
+  const { camera, gl } = useThree();
 
   // State references for performance (no re-renders on every frame input change)
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -16,10 +15,6 @@ export function MapControls() {
   const euler = useRef(new Euler(0, 0, 0, "YXZ"));
   const direction = useRef(new Vector3()); // Reused vector for movement
   const velocity = useRef(new Vector3());
-  const raycaster = useRef(new Raycaster());
-  const rayOrigin = useRef(new Vector3());
-  const downVector = useRef(new Vector3(0, -1, 0));
-  const terrainCheckTimer = useRef(0);
 
 
   useEffect(() => {
@@ -110,44 +105,8 @@ export function MapControls() {
     camera.translateY(direction.current.y);
     camera.translateZ(direction.current.z);
 
-    const isMoving =
-      direction.current.x !== 0 || direction.current.y !== 0 || direction.current.z !== 0;
-
-    terrainCheckTimer.current += delta;
-    if (!isMoving && terrainCheckTimer.current < TERRAIN_RAYCAST_INTERVAL_S) {
-      return;
-    }
-
-    if (terrainCheckTimer.current < TERRAIN_RAYCAST_INTERVAL_S) {
-      return;
-    }
-
-    terrainCheckTimer.current = 0;
-
-    const tileMapGroup = scene.getObjectByName("TileMapGroup");
-    if (tileMapGroup) {
-      rayOrigin.current.set(camera.position.x, 100000, camera.position.z);
-      raycaster.current.set(rayOrigin.current, downVector.current);
-
-      const allIntersects: Intersection[] = [];
-      tileMapGroup.traverseVisible((child) => {
-        if ((child as Mesh).isMesh && (child as Mesh).geometry) {
-          child.raycast(raycaster.current, allIntersects);
-        }
-      });
-
-      allIntersects.sort((a, b) => a.distance - b.distance);
-
-      if (allIntersects.length > 0) {
-        const terrainWorldY = allIntersects[0].point.y;
-        const minHeight = terrainWorldY + 50;
-
-        if (camera.position.y < minHeight) {
-          camera.position.setY(minHeight);
-        }
-      } else {
-        if (camera.position.y < 20) camera.position.setY(20);
-      }
+    if (camera.position.y < 20) {
+      camera.position.setY(20);
     }
   });
 

@@ -1,7 +1,7 @@
 import { MapProvider } from "geo-three";
 
 // Constants
-export const MAX_ZOOM = 19;
+export const MAX_ZOOM = 17;
 
 // We use the standard MapProvider class and override the HTTP fetch string
 // to easily use the Esri Basemap styles without needing a dedicated EsriProvider class, since we just need tile URLs.
@@ -44,7 +44,7 @@ export class EsriLabelProvider extends MapProvider {
     super();
     this.apiKey = apiKey;
     this.minZoom = 1;
-    this.maxZoom = 19;
+    this.maxZoom = 17;
   }
 
   public fetchTile(
@@ -68,7 +68,7 @@ export class EsriLabelProvider extends MapProvider {
 export class AWSTerrariumElevationProvider extends MapProvider {
   public constructor() {
     super();
-    this.maxZoom = 19;
+    this.maxZoom = 17;
   }
 
   public fetchTile(
@@ -80,7 +80,7 @@ export class AWSTerrariumElevationProvider extends MapProvider {
     let fetchZoom = zoom;
     let fetchX = x;
     let fetchY = y;
-    
+
     if (zoom > maxDataZoom) {
       const zoomDiff = zoom - maxDataZoom;
       fetchZoom = maxDataZoom;
@@ -115,22 +115,13 @@ export class AWSTerrariumElevationProvider extends MapProvider {
           const cropSize = image.width / power;
           const offsetX = (x % power) * cropSize;
           const offsetY = (y % power) * cropSize;
-          
-          context.drawImage(
-            image, 
-            offsetX, offsetY, cropSize, cropSize, 
-            0, 0, ctxWidth, ctxHeight
-          );
+
+          context.drawImage(image, offsetX, offsetY, cropSize, cropSize, 0, 0, ctxWidth, ctxHeight);
         } else {
           context.drawImage(image, 0, 0, ctxWidth, ctxHeight);
         }
 
-        const imageData = context.getImageData(
-          0,
-          0,
-          canvas.width,
-          canvas.height,
-        );
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
 
         // AWS Terrarium: height = (R * 256 + G + B / 256) - 32768
@@ -142,7 +133,7 @@ export class AWSTerrariumElevationProvider extends MapProvider {
 
           // Decode
           const h = r * 256.0 + g + b / 256.0 - 32768.0;
-          
+
           // Mountain scale exaggeration (so they don't look tiny from 6km up)
           const hExaggerated = h * 2.5;
 
@@ -158,9 +149,7 @@ export class AWSTerrariumElevationProvider extends MapProvider {
         resolve(canvas);
       };
       image.onerror = () => {
-        console.error(
-          `AWSTerrariumElevationProvider Failed to load tile: ${url}`,
-        );
+        console.error(`AWSTerrariumElevationProvider Failed to load tile: ${url}`);
         reject();
       };
       image.src = url;
