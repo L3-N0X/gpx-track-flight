@@ -127,7 +127,7 @@ The layout is fully responsive with:
 Built-in theme switching with three options:
 
 - **Light** - Light theme
-- **Dark** - Dark theme  
+- **Dark** - Dark theme
 - **System** - Follows system preference
 
 The theme preference is persisted across sessions.

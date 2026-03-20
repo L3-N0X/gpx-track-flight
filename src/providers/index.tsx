@@ -1,15 +1,15 @@
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 
 interface RootProvidersProps {
-  children: React.ReactNode;
+    children: React.ReactNode
 }
 
 export function RootProviders({ children }: RootProvidersProps) {
-  return (
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-      <Toaster />
-      {children}
-    </ThemeProvider>
-  );
+    return (
+        <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+            <Toaster />
+            {children}
+        </ThemeProvider>
+    )
 }
