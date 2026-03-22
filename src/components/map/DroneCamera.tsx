@@ -3,6 +3,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import { useDroneFlight } from '../../contexts/DroneFlightContext'
 import { INITIAL_COORDS } from '../../lib/constants'
+import type { PreparedTrackData } from '../../lib/trackPreparation'
+import { interpolateSmoothedSpeedAtDistance } from '../../lib/trackTelemetry'
 
 // Distance behind the drone the camera hovers (meters along the track tangent)
 const CAM_BEHIND_METERS = 600
@@ -11,10 +13,16 @@ const CAM_ABOVE_METERS = 250
 // How fast the camera swings around corners (lower = smoother, higher = snappier)
 // This smooths the "behind direction" so there's no lateral shake on curves
 const BEHIND_LERP = 0.04
+const MIN_TRACK_FLIGHT_SPEED_KMH = 5
 
-export function DroneCamera() {
+export function DroneCamera({
+    preparedTrack,
+}: {
+    preparedTrack: PreparedTrackData | null
+}) {
     const { camera } = useThree()
-    const { isPlaying, speed, progressRef, curveRef } = useDroneFlight()
+    const { isPlaying, setIsPlaying, speed, mode, progressRef, curveRef } =
+        useDroneFlight()
 
     const droneWorldPos = useRef(new Vector3())
     const rawTangent = useRef(new Vector3())
@@ -29,11 +37,32 @@ export function DroneCamera() {
 
         const curve = curveRef.current
         const curveLength = curve.getLength()
+        const flightDistanceM =
+            mode === 'track-speed' &&
+            preparedTrack &&
+            preparedTrack.totalDistanceM > 0
+                ? preparedTrack.totalDistanceM
+                : curveLength
+
+        const baseTravelSpeedMetersPerSecond =
+            mode === 'track-speed' &&
+            preparedTrack &&
+            preparedTrack.points.length > 0
+                ? Math.max(
+                      interpolateSmoothedSpeedAtDistance(
+                          preparedTrack.points,
+                          preparedTrack.totalDistanceM * progressRef.current
+                      ),
+                      MIN_TRACK_FLIGHT_SPEED_KMH
+                  ) / 3.6
+                : 200
 
         // Advance progress along the track
-        progressRef.current += (delta * speed * 200) / curveLength
+        progressRef.current +=
+            (delta * speed * baseTravelSpeedMetersPerSecond) / flightDistanceM
         if (progressRef.current >= 1) {
-            progressRef.current = 0 // loop
+            progressRef.current = 1
+            setIsPlaying(false)
         }
 
         const t = progressRef.current

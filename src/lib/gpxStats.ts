@@ -15,6 +15,7 @@ export interface GpxStats {
     highestElevationM: number
     /** Index of fastest point (null if no time) */
     fastestPointIndex: number | null
+    totalDurationS: number | null
     /** Speeds at each point in km/h */
     pointSpeeds: number[]
 }
@@ -118,6 +119,7 @@ export function computeGpxStats(name: string, points: GpxPoint[]): GpxStats {
         highestPointIndex,
         highestElevationM: Math.round(highestEle),
         fastestPointIndex,
+        totalDurationS: hasTime ? Math.round(totalTimeS) : null,
         pointSpeeds,
     }
 }

@@ -1,4 +1,4 @@
-import { Mountain, TrendingDown, TrendingUp, Gauge, Route } from 'lucide-react'
+import { Mountain, TrendingUp, Gauge, Route } from 'lucide-react'
 import type { GpxStats } from '../../lib/gpxStats'
 
 function StatRow({
@@ -21,9 +21,16 @@ function StatRow({
     )
 }
 
+function formatDuration(seconds: number): string {
+    // Format is H "h" MM "min"
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    return `${h}h ${m}min`
+}
+
 export function GpxStatsOverlay({ stats }: { stats: GpxStats }) {
     return (
-        <div className="absolute bottom-4 left-4 bg-background/80 backdrop-blur-sm p-4 rounded-md text-sm border border-border pointer-events-none min-w-50">
+        <div className="absolute bottom-4 left-4 bg-background/75 backdrop-blur-sm p-4 rounded-md text-sm border border-border pointer-events-none min-w-50">
             {/* Track name header */}
             <p
                 className="font-semibold text-foreground mb-3 truncate max-w-55"
@@ -38,20 +45,28 @@ export function GpxStatsOverlay({ stats }: { stats: GpxStats }) {
                     label="Distance"
                     value={`${stats.totalDistanceKm.toFixed(2)} km`}
                 />
+                {stats.totalDurationS !== null && (
+                    <StatRow
+                        icon={<Gauge size={13} />}
+                        label="Duration"
+                        value={formatDuration(stats.totalDurationS)}
+                    />
+                )}
                 <StatRow
                     icon={<TrendingUp size={13} />}
                     label="Elev. gain"
                     value={`+${stats.elevationGainM} m`}
                 />
-                <StatRow
+                {/* <StatRow
                     icon={<TrendingDown size={13} />}
                     label="Elev. loss"
                     value={`−${stats.elevationLossM} m`}
-                />
+                /> */}
 
                 {/* Divider — only shown when speed data exists */}
                 {(stats.maxSpeedKmh !== null || stats.avgSpeedKmh !== null) && (
-                    <div className="border-t border-border pt-2 space-y-2">
+                    // <div className="border-t border-border pt-2 space-y-2">
+                    <>
                         <StatRow
                             icon={<Gauge size={13} />}
                             label="Max speed"
@@ -70,7 +85,8 @@ export function GpxStatsOverlay({ stats }: { stats: GpxStats }) {
                                     : 'N/A'
                             }
                         />
-                    </div>
+                    </>
+                    // </div>
                 )}
             </div>
         </div>

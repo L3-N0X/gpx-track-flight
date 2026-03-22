@@ -1,17 +1,24 @@
 import { UnitsUtils } from 'geo-three'
 import { computeGpxStats, type GpxStats } from './gpxStats'
 import { parseGpx } from './gpxParser'
+import {
+    computeTrackProfileMetrics,
+    computeTrackSpeedMetrics,
+} from './trackTelemetry'
 
 export interface PreparedTrackPoint {
     lat: number
     lon: number
     ele: number
+    smoothedElevationM: number
+    inclinePercent: number
     mercatorX: number
     mercatorY: number
     x: number
     y: number
     z: number
     speedKmh: number
+    smoothedSpeedKmh: number
     distanceFromStartM: number
     originalIndex: number
 }
@@ -173,12 +180,15 @@ export function prepareTrackData(gpxContent: string): PreparedTrackData {
             lat: point.lat,
             lon: point.lon,
             ele: point.ele,
+            smoothedElevationM: point.ele,
+            inclinePercent: 0,
             mercatorX: mercator.x,
             mercatorY: mercator.y,
             x: mercator.x,
             y: Math.max(point.ele + 1000, 4000),
             z: -mercator.y,
             speedKmh: stats.pointSpeeds[i] ?? 0,
+            smoothedSpeedKmh: stats.pointSpeeds[i] ?? 0,
             distanceFromStartM: totalDistanceM,
             originalIndex: i,
         })
@@ -194,6 +204,19 @@ export function prepareTrackData(gpxContent: string): PreparedTrackData {
 
     if (preparedPoints.length === 1) {
         segmentSpeeds.push(preparedPoints[0].speedKmh)
+    }
+
+    const profileMetrics = computeTrackProfileMetrics(preparedPoints)
+    const speedMetrics = computeTrackSpeedMetrics(
+        preparedPoints.map((point) => point.speedKmh)
+    )
+    for (let i = 0; i < preparedPoints.length; i++) {
+        preparedPoints[i].smoothedElevationM =
+            profileMetrics.smoothedElevationsM[i] ?? preparedPoints[i].ele
+        preparedPoints[i].inclinePercent =
+            profileMetrics.inclinePercents[i] ?? 0
+        preparedPoints[i].smoothedSpeedKmh =
+            speedMetrics.smoothedSpeedsKmh[i] ?? preparedPoints[i].speedKmh
     }
 
     return {

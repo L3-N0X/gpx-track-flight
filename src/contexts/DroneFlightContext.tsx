@@ -8,11 +8,15 @@ import {
 } from 'react'
 import type { CatmullRomCurve3 } from 'three'
 
+export type DroneFlightMode = 'fixed' | 'track-speed'
+
 interface DroneFlightContextType {
     isPlaying: boolean
     setIsPlaying: (playing: boolean) => void
     speed: number
     setSpeed: (speed: number) => void
+    mode: DroneFlightMode
+    setMode: (mode: DroneFlightMode) => void
     progressRef: MutableRefObject<number>
     curveRef: MutableRefObject<CatmullRomCurve3 | null>
 }
@@ -25,20 +29,32 @@ export function DroneFlightProvider({
     children: React.ReactNode
 }) {
     const [isPlaying, setIsPlaying] = useState(false)
-    const [speed, setSpeed] = useState(1)
+    const [mode, setMode] = useState<DroneFlightMode>('fixed')
+    const [fixedSpeed, setFixedSpeed] = useState(1)
+    const [trackSpeedMultiplier, setTrackSpeedMultiplier] = useState(50)
     const progressRef = useRef(0)
     const curveRef = useRef<CatmullRomCurve3 | null>(null)
+    const speed = mode === 'track-speed' ? trackSpeedMultiplier : fixedSpeed
 
     const value = useMemo(
         () => ({
             isPlaying,
             setIsPlaying,
             speed,
-            setSpeed,
+            setSpeed: (nextSpeed: number) => {
+                if (mode === 'track-speed') {
+                    setTrackSpeedMultiplier(nextSpeed)
+                    return
+                }
+
+                setFixedSpeed(nextSpeed)
+            },
+            mode,
+            setMode,
             progressRef,
             curveRef,
         }),
-        [isPlaying, speed]
+        [isPlaying, mode, speed]
     )
 
     return (

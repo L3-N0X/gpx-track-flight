@@ -3,8 +3,15 @@ import { Play, Pause, ChevronDown, ChevronUp } from 'lucide-react'
 import { useDroneFlight } from '../../contexts/DroneFlightContext'
 
 export function DroneFlightControls({ canPlay }: { canPlay: boolean }) {
-    const { isPlaying, setIsPlaying, speed, setSpeed, progressRef } =
-        useDroneFlight()
+    const {
+        isPlaying,
+        setIsPlaying,
+        speed,
+        setSpeed,
+        mode,
+        setMode,
+        progressRef,
+    } = useDroneFlight()
     const [isExpanded, setIsExpanded] = useState(true)
     const progressBarRef = useRef<HTMLDivElement>(null)
 
@@ -26,34 +33,38 @@ export function DroneFlightControls({ canPlay }: { canPlay: boolean }) {
         return () => cancelAnimationFrame(animationFrameId)
     }, [progressRef])
 
-    const speeds = [0.5, 1, 2, 5, 10]
+    const speeds =
+        mode === 'track-speed' ? [10, 25, 50, 100, 200] : [0.5, 1, 2, 5, 10]
 
     return (
         <>
             {/* Top Overlay: Controls */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto">
-                <div className="bg-background/80 backdrop-blur-md border border-border rounded-xl shadow-lg p-2 min-w-50 flex flex-col gap-2">
-                    {/* Header row to toggled expand/collapse */}
-                    <div
-                        className="flex items-center justify-between text-sm font-semibold text-muted-foreground px-2 py-1 cursor-pointer hover:text-foreground transition-colors select-none"
-                        onClick={() => setIsExpanded(!isExpanded)}
-                    >
-                        <span>Flight Controls</span>
-                        {isExpanded ? (
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto">
+                {isExpanded ? (
+                    <div className="mt-3 bg-background/75 backdrop-blur-md border border-border rounded-xl shadow-lg p-2 min-w-50 flex flex-col gap-3">
+                        <div
+                            className="flex items-center justify-between text-sm font-semibold text-muted-foreground px-2 py-1 cursor-pointer hover:text-foreground transition-colors select-none"
+                            onClick={() => setIsExpanded(false)}
+                        >
+                            <span>Flight Settings</span>
                             <ChevronUp size={16} />
-                        ) : (
-                            <ChevronDown size={16} />
-                        )}
-                    </div>
+                        </div>
 
-                    {/* Expanded Controls */}
-                    {isExpanded && (
-                        <div className="flex flex-col gap-3 p-2 bg-card rounded-lg border border-border/50">
+                        <div className="flex flex-col gap-3 px-2 pb-2">
                             <div className="flex justify-center">
                                 <button
                                     onClick={() => {
                                         if (canPlay) {
-                                            setIsPlaying(!isPlaying)
+                                            if (isPlaying) {
+                                                setIsPlaying(false)
+                                                return
+                                            }
+
+                                            if (progressRef.current >= 1) {
+                                                progressRef.current = 0
+                                            }
+
+                                            setIsPlaying(true)
                                         }
                                     }}
                                     disabled={!canPlay}
@@ -72,9 +83,39 @@ export function DroneFlightControls({ canPlay }: { canPlay: boolean }) {
                                 </button>
                             </div>
 
+                            <div className="space-y-2">
+                                <div className="text-xs font-medium text-muted-foreground">
+                                    Flight Mode
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={() => setMode('fixed')}
+                                        disabled={isPlaying}
+                                        className={`px-2 py-2 text-xs font-semibold rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                            mode === 'fixed'
+                                                ? 'bg-accent text-accent-foreground border border-ring/50'
+                                                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                                        }`}
+                                    >
+                                        Fixed Speed
+                                    </button>
+                                    <button
+                                        onClick={() => setMode('track-speed')}
+                                        disabled={isPlaying}
+                                        className={`px-2 py-2 text-xs font-semibold rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                            mode === 'track-speed'
+                                                ? 'bg-accent text-accent-foreground border border-ring/50'
+                                                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                                        }`}
+                                    >
+                                        Drive Speed
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="space-y-1 text-center">
                                 <div className="text-xs font-medium text-muted-foreground mb-1">
-                                    Playback Speed
+                                    Playback Multiplier
                                 </div>
                                 <div className="flex gap-1 justify-center">
                                     {speeds.map((s) => (
@@ -93,20 +134,29 @@ export function DroneFlightControls({ canPlay }: { canPlay: boolean }) {
                                 </div>
                             </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => setIsExpanded(true)}
+                        className="flex h-5 w-10 items-center justify-center rounded-b-md border-x border-b border-border bg-background/75 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:text-foreground"
+                        aria-label="Expand flight settings"
+                    >
+                        <ChevronDown size={16} />
+                    </button>
+                )}
             </div>
 
             {/* Bottom Progress Bar */}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-96 h-12 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-auto group">
-                <div className="w-full bg-background/90 backdrop-blur-md rounded-full h-4 border border-border overflow-hidden cursor-pointer shadow-md">
+                <div className="w-full bg-background/75 backdrop-blur-md rounded-full h-4 border border-border overflow-hidden cursor-pointer shadow-md">
                     <div
                         ref={progressBarRef}
                         className="bg-primary h-full rounded-full transition-none"
                         style={{ width: '0%' }}
                     ></div>
                 </div>
-                <div className="absolute -top-6 text-xs font-semibold text-foreground bg-background/80 px-2 py-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="absolute -top-6 text-xs font-semibold text-foreground bg-background/75 px-2 py-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     Flight Progress
                 </div>
             </div>

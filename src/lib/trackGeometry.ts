@@ -12,7 +12,10 @@ export interface TrackGeometryInput {
     useSpeedColors: boolean
 }
 
-function getSpeedColor(speedKmh: number, maxSpeedKmh: number | null) {
+export function getTrackColorForSpeed(
+    speedKmh: number,
+    maxSpeedKmh: number | null
+) {
     const color = new Color()
     const normalizedMax = maxSpeedKmh && maxSpeedKmh > 0 ? maxSpeedKmh : 1
     const ratio = Math.min(Math.max(speedKmh / normalizedMax, 0), 1)
@@ -120,7 +123,7 @@ export function buildSegmentedTrackGeometry({
         )
         const speed = segmentSpeeds[speedIndex] ?? 0
         const color = useSpeedColors
-            ? getSpeedColor(speed, maxSpeedKmh)
+            ? getTrackColorForSpeed(speed, maxSpeedKmh)
             : getNeutralTrackColor()
 
         const start = pathPoints[pointIndexA]

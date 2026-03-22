@@ -1,23 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { TileMap } from './TileMap'
-import { MapControls } from './MapControls'
-import { Track } from './Track'
-import { INITIAL_COORDS } from '../../lib/constants'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
     DroneFlightProvider,
     useDroneFlight,
 } from '../../contexts/DroneFlightContext'
-import { DroneFlightControls } from './DroneFlightControls'
+import { INITIAL_COORDS } from '../../lib/constants'
+import { prepareTrackData } from '../../lib/trackPreparation'
 import { DroneCamera } from './DroneCamera'
+import { DroneFlightControls } from './DroneFlightControls'
+import { FlightTelemetryOverlay } from './FlightTelemetryOverlay'
 import { GpxStatsOverlay } from './GpxStatsOverlay'
+import { MapControls } from './MapControls'
 import {
     MapDebugOverlay,
     type MapDebugMetrics,
     type TrackSamplingStatus,
 } from './MapDebugOverlay'
-import { prepareTrackData } from '../../lib/trackPreparation'
+import { TileMap } from './TileMap'
+import { Track } from './Track'
 
 function CameraSetup({
     hasTrack,
@@ -47,45 +48,58 @@ function ControlsOverlay() {
     const [isOpen, setIsOpen] = useState(false)
 
     return (
-        <div className="absolute bottom-4 right-4 bg-background/80 backdrop-blur-sm p-4 rounded-md text-sm border border-border pointer-events-auto">
-            <div
-                className="flex items-center justify-between cursor-pointer font-semibold gap-4 select-none text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setIsOpen(!isOpen)}
-            >
-                <span>Controls</span>
-                {isOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-            </div>
-            {isOpen && (
-                <ul className="space-y-1 text-muted-foreground mt-3">
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">W</kbd> Forward
-                    </li>
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">S</kbd> Backward
-                    </li>
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">A</kbd> Left
-                    </li>
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">D</kbd> Right
-                    </li>
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">Q</kbd> Down
-                    </li>
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">E</kbd> Up
-                    </li>
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">Shift</kbd> Speed
-                        Boost
-                    </li>
-                    <li>
-                        <kbd className="bg-muted px-1 rounded">
-                            Click + Drag
-                        </kbd>{' '}
-                        Look Around
-                    </li>
-                </ul>
+        <div className="absolute top-0 left-0 pointer-events-auto">
+            {isOpen ? (
+                <div className="ml-3 mt-3 bg-background/75 backdrop-blur-sm p-4 rounded-md text-sm border border-border">
+                    <div
+                        className="flex items-center justify-between cursor-pointer font-semibold gap-4 select-none text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setIsOpen(false)}
+                    >
+                        <span>Controls</span>
+                        <ChevronLeft size={16} />
+                    </div>
+                    <ul className="space-y-1 text-muted-foreground mt-3">
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">W</kbd>{' '}
+                            Forward
+                        </li>
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">S</kbd>{' '}
+                            Backward
+                        </li>
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">A</kbd> Left
+                        </li>
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">D</kbd> Right
+                        </li>
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">Q</kbd> Down
+                        </li>
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">E</kbd> Up
+                        </li>
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">Shift</kbd>{' '}
+                            Speed Boost
+                        </li>
+                        <li>
+                            <kbd className="bg-muted px-1 rounded">
+                                Click + Drag
+                            </kbd>{' '}
+                            Look Around
+                        </li>
+                    </ul>
+                </div>
+            ) : (
+                <button
+                    type="button"
+                    onClick={() => setIsOpen(true)}
+                    className="flex h-10 w-5 items-center justify-center rounded-r-md border-y border-r border-border bg-background/75 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:text-foreground"
+                    aria-label="Expand controls"
+                >
+                    <ChevronRight size={16} />
+                </button>
             )}
         </div>
     )
@@ -246,12 +260,19 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                     )}
 
                     <MapControls />
-                    <DroneCamera />
+                    <DroneCamera preparedTrack={preparedTrack} />
                     <DebugProbe onMetricsChange={setDebugMetrics} />
                 </Canvas>
 
                 {preparedTrack && (
-                    <GpxStatsOverlay stats={preparedTrack.stats} />
+                    <>
+                        <GpxStatsOverlay stats={preparedTrack.stats} />
+                        {preparedTrack.points.length > 0 && (
+                            <FlightTelemetryOverlay
+                                preparedTrack={preparedTrack}
+                            />
+                        )}
+                    </>
                 )}
                 <MapDebugOverlay
                     isOpen={isDebugOpen}
