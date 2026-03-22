@@ -1,17 +1,25 @@
-import { useEffect, useState } from 'react'
-import { LODRaycast, MapHeightNode, MapNodeGeometry, MapView } from 'geo-three'
 import {
-    EsriWorldImageryProvider,
+    LODRaycast,
+    MapHeightNode,
+    MapNode,
+    MapNodeGeometry,
+    MapView,
+} from 'geo-three'
+import { useEffect, useState } from 'react'
+import { INITIAL_COORDS } from '../../lib/constants'
+import {
     AWSTerrariumElevationProvider,
+    EsriWorldImageryProvider,
     MAX_ZOOM,
 } from './GeoProviders'
-import { INITIAL_COORDS } from '../../lib/constants'
 
 const TERRAIN_GEOMETRY_SEGMENTS = 16
 
 MapNodeGeometry.buildSkirt = function () {
     return
 }
+
+MapNode.prototype.frustumCulled = false
 
 interface TileMapProps {
     onWarmupChange: (ready: boolean) => void
@@ -21,16 +29,34 @@ export function TileMap({ onWarmupChange }: TileMapProps) {
     const [mapView, setMapView] = useState<MapView | null>(null)
 
     useEffect(() => {
-        const apiKey =
+        const esriApiKey =
             import.meta.env.ESRI_API_KEY || import.meta.env.VITE_ESRI_API_KEY
-        if (!apiKey) {
+        const mapboxApiKey =
+            import.meta.env.MAPBOX_API_TOKEN ||
+            import.meta.env.VITE_MAPBOX_API_TOKEN
+        if (!esriApiKey) {
             console.warn(
                 'ESRI_API_KEY or VITE_ESRI_API_KEY is missing from environment variables. Imagery tiles may fail to load.'
             )
         }
+        if (!mapboxApiKey) {
+            console.warn(
+                'MAPBOX_API_TOKEN or VITE_MAPBOX_API_TOKEN is missing from environment variables. Map tiles may fail to load.'
+            )
+        }
 
-        const colorProvider = new EsriWorldImageryProvider(apiKey)
+        const colorProvider = new EsriWorldImageryProvider(esriApiKey)
+        // const colorProvider = new MapBoxProvider(
+        //     mapboxApiKey,
+        //     'mapbox/satellite-v9'
+        // )
         const elevationProvider = new AWSTerrariumElevationProvider()
+        // const elevationProvider = new MapBoxProvider(
+        //     mapboxApiKey,
+        //     'mapbox.terrain-rgb',
+        //     MapBoxProvider.MAP_ID
+        //     // 'pngraw'
+        // )
         colorProvider.minZoom = 0
         colorProvider.maxZoom = MAX_ZOOM
 
@@ -45,7 +71,7 @@ export function TileMap({ onWarmupChange }: TileMapProps) {
         map.cacheTiles = false
         if (map.lod instanceof LODRaycast) {
             map.lod.thresholdUp = 0.75
-            map.lod.thresholdDown = 0.22
+            map.lod.thresholdDown = 0.15
         }
 
         // eslint-disable-next-line react-hooks/set-state-in-effect

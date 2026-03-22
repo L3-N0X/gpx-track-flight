@@ -211,7 +211,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                         position: [0, 6000, 0],
                         fov: 60,
                         near: 10,
-                        far: 1e9,
+                        far: 1e6,
                     }}
                 >
                     <CameraSetup
