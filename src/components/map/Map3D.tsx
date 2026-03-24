@@ -1,6 +1,7 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Vector3 } from 'three'
 import {
     DroneFlightProvider,
     useDroneFlight,
@@ -20,26 +21,90 @@ import {
 import { TileMap } from './TileMap'
 import { Track } from './Track'
 
+const INITIAL_CAMERA_BEHIND_METERS = 180
+const INITIAL_CAMERA_ABOVE_METERS = 260
+const INITIAL_CAMERA_LOOKAHEAD_METERS = 110
+
+interface InitialCameraPose {
+    position: Vector3
+    target: Vector3
+}
+
+function findLookAheadPoint(
+    points: Vector3[],
+    minimumDistanceM: number
+): Vector3 | null {
+    if (points.length < 2) {
+        return null
+    }
+
+    const startPoint = points[0]
+
+    for (let i = 1; i < points.length; i++) {
+        if (points[i].distanceTo(startPoint) >= minimumDistanceM) {
+            return points[i]
+        }
+    }
+
+    return points[points.length - 1] ?? null
+}
+
+function computeInitialCameraPose(
+    alignedPathPoints: Vector3[]
+): InitialCameraPose | null {
+    const startPoint = alignedPathPoints[0]
+    if (!startPoint) {
+        return null
+    }
+
+    const trackOffset = new Vector3(-INITIAL_COORDS.x, 0, INITIAL_COORDS.y)
+    const startWorld = startPoint.clone().add(trackOffset)
+    const aheadPoint =
+        findLookAheadPoint(alignedPathPoints, INITIAL_CAMERA_LOOKAHEAD_METERS) ??
+        startPoint
+    const aheadWorld = aheadPoint.clone().add(trackOffset)
+    const forward = aheadWorld.clone().sub(startWorld)
+
+    if (forward.lengthSq() < 1e-6) {
+        return {
+            position: startWorld.clone().add(new Vector3(0, 250, 250)),
+            target: startWorld,
+        }
+    }
+
+    forward.normalize()
+
+    const position = startWorld
+        .clone()
+        .sub(forward.clone().multiplyScalar(INITIAL_CAMERA_BEHIND_METERS))
+        .add(new Vector3(0, INITIAL_CAMERA_ABOVE_METERS, 0))
+
+    const target = startWorld
+        .clone()
+        .add(forward.multiplyScalar(INITIAL_CAMERA_LOOKAHEAD_METERS))
+        .add(new Vector3(0, 8, 0))
+
+    return { position, target }
+}
+
 function CameraSetup({
-    hasTrack,
-    firstPoint,
+    initialCameraPose,
+    applyToken,
 }: {
-    hasTrack: boolean
-    firstPoint?: { x: number; y: number; z: number }
+    initialCameraPose: InitialCameraPose | null
+    applyToken: number
 }) {
     const { camera } = useThree()
 
     useEffect(() => {
-        if (!hasTrack || !firstPoint) {
+        if (!initialCameraPose || applyToken === 0) {
             return
         }
 
-        camera.position.set(
-            firstPoint.x - INITIAL_COORDS.x,
-            firstPoint.y + 2000,
-            firstPoint.z + INITIAL_COORDS.y
-        )
-    }, [camera, firstPoint, hasTrack])
+        camera.position.copy(initialCameraPose.position)
+        camera.lookAt(initialCameraPose.target)
+        camera.updateMatrixWorld()
+    }, [applyToken, camera, initialCameraPose])
 
     return null
 }
@@ -188,6 +253,9 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
 
     const [terrainReady, setTerrainReady] = useState(false)
     const [trackReady, setTrackReady] = useState(false)
+    const [initialCameraPose, setInitialCameraPose] =
+        useState<InitialCameraPose | null>(null)
+    const [cameraApplyToken, setCameraApplyToken] = useState(0)
     const [isDebugOpen, setIsDebugOpen] = useState(false)
     const [debugMetrics, setDebugMetrics] = useState<MapDebugMetrics | null>(
         null
@@ -201,6 +269,8 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
         setPrevTrack(preparedTrack)
         setTerrainReady(false)
         setTrackReady(false)
+        setInitialCameraPose(null)
+        setCameraApplyToken(0)
         setSamplingStatus(null)
     }
 
@@ -229,8 +299,8 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                     }}
                 >
                     <CameraSetup
-                        hasTrack={preparedTrack !== null}
-                        firstPoint={preparedTrack?.points[0]}
+                        initialCameraPose={initialCameraPose}
+                        applyToken={cameraApplyToken}
                     />
 
                     <ambientLight intensity={0.5} />
@@ -253,14 +323,27 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                                 <Track
                                     preparedTrack={preparedTrack}
                                     onReadyChange={setTrackReady}
+                                    onInitialCameraPoseReady={(points) => {
+                                        const pose =
+                                            computeInitialCameraPose(points)
+                                        setInitialCameraPose(pose)
+                                        if (pose) {
+                                            setCameraApplyToken(
+                                                (current) => current + 1
+                                            )
+                                        }
+                                    }}
                                     onSamplingStatusChange={setSamplingStatus}
                                 />
                             </group>
                         </>
                     )}
 
-                    <MapControls />
-                    <DroneCamera preparedTrack={preparedTrack} />
+                    <MapControls cameraSyncToken={cameraApplyToken} />
+                    <DroneCamera
+                        preparedTrack={preparedTrack}
+                        initialCameraPose={initialCameraPose}
+                    />
                     <DebugProbe onMetricsChange={setDebugMetrics} />
                 </Canvas>
 
@@ -282,7 +365,15 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                     samplingStatus={samplingStatus}
                 />
                 <ControlsOverlay />
-                <DroneFlightControls canPlay={trackReady} />
+                <DroneFlightControls
+                    canPlay={trackReady}
+                    canReset={initialCameraPose !== null}
+                    onResetCamera={() => {
+                        if (initialCameraPose) {
+                            setCameraApplyToken((current) => current + 1)
+                        }
+                    }}
+                />
             </div>
         </DroneFlightProvider>
     )

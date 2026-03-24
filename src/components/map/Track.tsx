@@ -28,6 +28,7 @@ import { interpolateSmoothedSpeedAtDistance } from '../../lib/trackTelemetry'
 interface TrackProps {
     preparedTrack: PreparedTrackData
     onReadyChange: (ready: boolean) => void
+    onInitialCameraPoseReady?: (alignedPathPoints: Vector3[]) => void
     onSamplingStatusChange?: (status: {
         sampledPoints: number
         totalPoints: number
@@ -264,6 +265,7 @@ function smoothPath(points: Vector3[]) {
 export function Track({
     preparedTrack,
     onReadyChange,
+    onInitialCameraPoseReady,
     onSamplingStatusChange,
 }: TrackProps) {
     const { curveRef, progressRef } = useDroneFlight()
@@ -276,6 +278,7 @@ export function Track({
             }))
     )
     const pointsRef = useRef<SnappedTrackPoint[]>(snappedPoints)
+    const initialCameraPoseReportedRef = useRef(false)
     const [samplingComplete, setSamplingComplete] = useState(false)
 
     // 1. Keep track of the previous track
@@ -291,6 +294,7 @@ export function Track({
         setPrevTrack(preparedTrack)
         setSnappedPoints(nextPoints)
         setSamplingComplete(false)
+        initialCameraPoseReportedRef.current = false
     }
 
     // 3. Update REFS and fire CALLBACKS in useEffect
@@ -304,6 +308,7 @@ export function Track({
         pointsRef.current = nextPoints
         curveRef.current = null
         progressRef.current = 0
+        initialCameraPoseReportedRef.current = false
 
         onSamplingStatusChange?.({
             sampledPoints: 0,
@@ -542,13 +547,26 @@ export function Track({
     useEffect(() => {
         if (curve && samplingComplete) {
             curveRef.current = curve
+
+            if (!initialCameraPoseReportedRef.current) {
+                initialCameraPoseReportedRef.current = true
+                onInitialCameraPoseReady?.(smoothedPath)
+            }
+
             onReadyChange(true)
             return
         }
 
         curveRef.current = null
         onReadyChange(false)
-    }, [curve, curveRef, onReadyChange, samplingComplete])
+    }, [
+        curve,
+        curveRef,
+        onInitialCameraPoseReady,
+        onReadyChange,
+        samplingComplete,
+        smoothedPath,
+    ])
 
     if (!curve || smoothedPath.length < 2) {
         return null

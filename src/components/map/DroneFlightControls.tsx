@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { Play, Pause, ChevronDown, ChevronUp } from 'lucide-react'
+import { Play, Pause, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react'
 import { useDroneFlight } from '../../contexts/DroneFlightContext'
 
-export function DroneFlightControls({ canPlay }: { canPlay: boolean }) {
+export function DroneFlightControls({
+    canPlay,
+    canReset,
+    onResetCamera,
+}: {
+    canPlay: boolean
+    canReset: boolean
+    onResetCamera: () => void
+}) {
     const {
         isPlaying,
         setIsPlaying,
@@ -79,7 +87,23 @@ export function DroneFlightControls({ canPlay }: { canPlay: boolean }) {
                                         ? 'Preparing Flight'
                                         : isPlaying
                                           ? 'Pause'
-                                          : 'Play Flight'}
+                                        : 'Play Flight'}
+                                </button>
+                            </div>
+
+                            <div className="flex justify-center">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsPlaying(false)
+                                        progressRef.current = 0
+                                        onResetCamera()
+                                    }}
+                                    disabled={!canReset}
+                                    className="flex items-center justify-center gap-2 bg-muted hover:bg-muted/80 disabled:bg-muted/60 disabled:text-muted-foreground text-foreground font-medium py-2 px-6 rounded-md transition-colors w-full disabled:cursor-not-allowed"
+                                >
+                                    <RotateCcw size={16} />
+                                    Reset Camera
                                 </button>
                             </div>
 

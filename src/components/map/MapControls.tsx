@@ -6,7 +6,7 @@ const MOVEMENT_SPEED = 1000 // Base speed
 const BOOST_MULTIPLIER = 10
 const ROTATION_SPEED = 0.003
 
-export function MapControls() {
+export function MapControls({ cameraSyncToken = 0 }: { cameraSyncToken?: number }) {
     const { camera, gl } = useThree()
 
     // State references for performance (no re-renders on every frame input change)
@@ -17,11 +17,11 @@ export function MapControls() {
     const velocity = useRef(new Vector3())
 
     useEffect(() => {
-        // Initialize euler based on initial camera rotation,
-        // looking down 60 degrees by default so the map is instantly visible
-        camera.quaternion.setFromEuler(new Euler(-Math.PI / 3, 0, 0, 'YXZ'))
+        // Inherit the camera pose that was computed during scene setup.
         euler.current.setFromQuaternion(camera.quaternion)
+    }, [camera, cameraSyncToken])
 
+    useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             keys.current[e.code] = true
         }

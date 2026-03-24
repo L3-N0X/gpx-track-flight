@@ -14,11 +14,24 @@ const CAM_ABOVE_METERS = 250
 // This smooths the "behind direction" so there's no lateral shake on curves
 const BEHIND_LERP = 0.04
 const MIN_TRACK_FLIGHT_SPEED_KMH = 5
+const FLIGHT_START_TRANSITION_SECONDS = 1.6
+
+interface InitialCameraPose {
+    position: Vector3
+    target: Vector3
+}
+
+function applyWorldOffset(position: Vector3) {
+    position.x -= INITIAL_COORDS.x
+    position.z += INITIAL_COORDS.y
+}
 
 export function DroneCamera({
     preparedTrack,
+    initialCameraPose,
 }: {
     preparedTrack: PreparedTrackData | null
+    initialCameraPose: InitialCameraPose | null
 }) {
     const { camera } = useThree()
     const { isPlaying, setIsPlaying, speed, mode, progressRef, curveRef } =
@@ -26,14 +39,115 @@ export function DroneCamera({
 
     const droneWorldPos = useRef(new Vector3())
     const rawTangent = useRef(new Vector3())
+    const transitionStartPos = useRef(new Vector3())
+    const transitionStartTarget = useRef(new Vector3())
+    const transitionTargetPos = useRef(new Vector3())
+    const transitionTargetLookAt = useRef(new Vector3())
+    const cameraForward = useRef(new Vector3())
+    const transitionProgress = useRef(0)
+    const isTransitioning = useRef(false)
+    const wasPlaying = useRef(false)
     // Smoothed "behind" direction — this is the key to jitter-free cornering.
     // Instead of snapping the camera directly behind the drone each frame (which
     // oscillates left/right as the tangent wiggles), we lerp this direction
     // gradually, so the camera glides around corners.
     const smoothBehind = useRef(new Vector3(0, 0, 1)) // arbitrary initial dir
 
+    const updateFlightCameraPose = (t: number) => {
+        const curve = curveRef.current
+        if (!curve) {
+            return null
+        }
+
+        curve.getPointAt(t, droneWorldPos.current)
+        applyWorldOffset(droneWorldPos.current)
+
+        curve.getTangentAt(t, rawTangent.current)
+
+        const lerpFactor = 1 - Math.pow(1 - BEHIND_LERP, 1)
+        smoothBehind.current
+            .lerp(rawTangent.current.clone().negate(), lerpFactor)
+            .normalize()
+
+        transitionTargetPos.current.set(
+            droneWorldPos.current.x +
+                smoothBehind.current.x * CAM_BEHIND_METERS,
+            droneWorldPos.current.y + CAM_ABOVE_METERS,
+            droneWorldPos.current.z +
+                smoothBehind.current.z * CAM_BEHIND_METERS
+        )
+        transitionTargetLookAt.current.copy(droneWorldPos.current)
+
+        return {
+            position: transitionTargetPos.current,
+            target: transitionTargetLookAt.current,
+        }
+    }
+
     useFrame((_, delta) => {
-        if (!isPlaying || !curveRef.current) return
+        if (!curveRef.current) {
+            wasPlaying.current = isPlaying
+            return
+        }
+
+        if (isPlaying && !wasPlaying.current) {
+            if (progressRef.current <= 0.0001 && initialCameraPose) {
+                isTransitioning.current = true
+                transitionProgress.current = 0
+                transitionStartPos.current.copy(camera.position)
+                camera.getWorldDirection(cameraForward.current)
+                transitionStartTarget.current
+                    .copy(camera.position)
+                    .add(cameraForward.current.multiplyScalar(600))
+                smoothBehind.current.set(0, 0, 1)
+            } else {
+                isTransitioning.current = false
+            }
+        }
+
+        if (!isPlaying) {
+            isTransitioning.current = false
+            wasPlaying.current = false
+            return
+        }
+
+        if (isTransitioning.current) {
+            const initialPose = updateFlightCameraPose(0)
+            if (!initialPose) {
+                wasPlaying.current = isPlaying
+                return
+            }
+
+            transitionProgress.current = Math.min(
+                transitionProgress.current +
+                    delta / FLIGHT_START_TRANSITION_SECONDS,
+                1
+            )
+
+            const eased =
+                transitionProgress.current *
+                transitionProgress.current *
+                (3 - 2 * transitionProgress.current)
+
+            camera.position.lerpVectors(
+                transitionStartPos.current,
+                initialPose.position,
+                eased
+            )
+            transitionTargetPos.current.lerpVectors(
+                transitionStartTarget.current,
+                initialPose.target,
+                eased
+            )
+            camera.lookAt(transitionTargetPos.current)
+
+            if (transitionProgress.current >= 1) {
+                isTransitioning.current = false
+            }
+
+            wasPlaying.current = isPlaying
+            return
+        }
 
         const curve = curveRef.current
         const curveLength = curve.getLength()
@@ -67,25 +181,14 @@ export function DroneCamera({
 
         const t = progressRef.current
 
-        // --- Drone world position (local → world) ---
         curve.getPointAt(t, droneWorldPos.current)
-        droneWorldPos.current.x -= INITIAL_COORDS.x
-        droneWorldPos.current.z += INITIAL_COORDS.y
-
-        // --- Raw tangent (forward-facing, no axis corrections needed for a pure translation group) ---
+        applyWorldOffset(droneWorldPos.current)
         curve.getTangentAt(t, rawTangent.current)
-
-        // Desired "behind" direction = opposite of forward tangent
-        // Lerp toward it — this is what eliminates lateral shake:
-        // the behind-dir glides smoothly around corners instead of snapping.
-        // Lerp factor takes delta into account to be frame-rate independent.
         const lerpFactor = 1 - Math.pow(1 - BEHIND_LERP, delta * 60)
         smoothBehind.current
             .lerp(rawTangent.current.clone().negate(), lerpFactor)
-            .normalize() // normalize so distance stays constant regardless of lerp magnitude
+            .normalize()
 
-        // --- Camera position: behind + above, using smoothed direction ---
-        // Constant distance every frame because we normalize smoothBehind.
         const camX =
             droneWorldPos.current.x + smoothBehind.current.x * CAM_BEHIND_METERS
         const camY = droneWorldPos.current.y + CAM_ABOVE_METERS
@@ -93,11 +196,8 @@ export function DroneCamera({
             droneWorldPos.current.z + smoothBehind.current.z * CAM_BEHIND_METERS
         camera.position.set(camX, camY, camZ)
 
-        // --- Always look directly at the drone —
-        // No rotation slerp needed: since the camera position is already smoothed
-        // by the BEHIND_LERP, the look direction changes smoothly automatically.
-        // Using direct lookAt guarantees the drone is ALWAYS centered in the frame.
         camera.lookAt(droneWorldPos.current)
+        wasPlaying.current = isPlaying
     })
 
     return null
