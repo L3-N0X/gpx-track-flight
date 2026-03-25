@@ -2,7 +2,6 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { MapView } from 'geo-three'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Vector3 } from 'three'
 import {
     DroneFlightProvider,
     useDroneFlight,
@@ -131,60 +130,125 @@ function DebugProbe({
     const { camera, gl, scene } = useThree()
     const { curveRef, isPlaying, progressRef, speed } = useDroneFlight()
     const elapsedMsRef = useRef(0)
+    const logElapsedMsRef = useRef(0)
     const frameCountRef = useRef(0)
 
     useFrame((_, delta) => {
-        const nextElapsedMs = elapsedMsRef.current + delta * 1000
+        const deltaMs = delta * 1000
+        const nextElapsedMs = elapsedMsRef.current + deltaMs
+        const nextLogElapsedMs = logElapsedMsRef.current + deltaMs
         const nextFrameCount = frameCountRef.current + 1
 
-        if (nextElapsedMs < 300) {
+        // 1. Regular metrics update (300ms)
+        if (nextElapsedMs >= 300) {
+            let visibleMapMeshes = 0
+            let totalMapMeshes = 0
+            let visibleSceneObjects = 0
+            const tileMapGroup = scene.getObjectByName('TileMapGroup')
+
+            scene.traverseVisible(() => {
+                visibleSceneObjects++
+            })
+
+            if (tileMapGroup) {
+                tileMapGroup.traverse((child) => {
+                    // @ts-expect-error three runtime flag
+                    if (child.isMesh) {
+                        totalMapMeshes++
+                        if (child.visible) {
+                            visibleMapMeshes++
+                        }
+                    }
+                })
+            }
+
+            onMetricsChange({
+                fps: (nextFrameCount * 1000) / nextElapsedMs,
+                frameTimeMs: nextElapsedMs / nextFrameCount,
+                drawCalls: gl.info.render.calls,
+                triangles: gl.info.render.triangles,
+                geometries: gl.info.memory.geometries,
+                textures: gl.info.memory.textures,
+                visibleMapMeshes,
+                totalMapMeshes,
+                visibleSceneObjects,
+                cameraX: camera.position.x,
+                cameraY: camera.position.y,
+                cameraZ: camera.position.z,
+                flightProgress: progressRef.current,
+                isPlaying,
+                speed,
+                curveReady: curveRef.current !== null,
+            })
+
+            elapsedMsRef.current = 0
+            frameCountRef.current = 0
+        } else {
             elapsedMsRef.current = nextElapsedMs
             frameCountRef.current = nextFrameCount
-            return
         }
 
-        let visibleMapMeshes = 0
-        let totalMapMeshes = 0
-        let visibleSceneObjects = 0
-        const tileMapGroup = scene.getObjectByName('TileMapGroup')
-
-        scene.traverseVisible(() => {
-            visibleSceneObjects++
-        })
-
-        if (tileMapGroup) {
-            tileMapGroup.traverse((child) => {
-                // @ts-expect-error three runtime flag
-                if (child.isMesh) {
-                    totalMapMeshes++
-                    if (child.visible) {
-                        visibleMapMeshes++
-                    }
-                }
+        // 2. Detailed debug logging (5 seconds)
+        if (nextLogElapsedMs >= 5000) {
+            const tileMapGroup = scene.getObjectByName('TileMapGroup')
+            console.group('--- 5s Performance Debug ---')
+            console.log('Renderer Memory:', {
+                geometries: gl.info.memory.geometries,
+                textures: gl.info.memory.textures,
+                programs: gl.info.programs?.length,
             })
+            console.log('Renderer Render:', {
+                calls: gl.info.render.calls,
+                triangles: gl.info.render.triangles,
+                points: gl.info.render.points,
+                lines: gl.info.render.lines,
+            })
+
+            if (tileMapGroup) {
+                let mapNodes = 0
+                let mapMeshes = 0
+                const nodeLevels: Record<number, number> = {}
+                const classNames = new Set<string>()
+
+                tileMapGroup.traverse((child) => {
+                    classNames.add(child.constructor.name)
+                    
+                    // Robust check for geo-three nodes
+                    // @ts-expect-error level property
+                    const isNode = child.level !== undefined || child.isMapNode || child.constructor.name.includes('Node')
+                    
+                    if (isNode) {
+                        mapNodes++
+                        // @ts-expect-error level property
+                        const lvl = child.level || 0
+                        nodeLevels[lvl] = (nodeLevels[lvl] || 0) + 1
+                    }
+                    // @ts-expect-error three Mesh detection
+                    if (child.isMesh) {
+                        mapMeshes++
+                    }
+                })
+
+                console.log('TileMap Stats:', {
+                    totalNodes: mapNodes,
+                    totalMeshes: mapMeshes,
+                    levels: nodeLevels,
+                    classes: Array.from(classNames),
+                })
+            }
+
+            // Check for potential leaking objects in the scene
+            let totalSceneObjects = 0
+            scene.traverse(() => {
+                totalSceneObjects++
+            })
+            console.log('Scene Graph:', { totalObjects: totalSceneObjects })
+            console.groupEnd()
+
+            logElapsedMsRef.current = 0
+        } else {
+            logElapsedMsRef.current = nextLogElapsedMs
         }
-
-        onMetricsChange({
-            fps: (nextFrameCount * 1000) / nextElapsedMs,
-            frameTimeMs: nextElapsedMs / nextFrameCount,
-            drawCalls: gl.info.render.calls,
-            triangles: gl.info.render.triangles,
-            geometries: gl.info.memory.geometries,
-            textures: gl.info.memory.textures,
-            visibleMapMeshes,
-            totalMapMeshes,
-            visibleSceneObjects,
-            cameraX: camera.position.x,
-            cameraY: camera.position.y,
-            cameraZ: camera.position.z,
-            flightProgress: progressRef.current,
-            isPlaying,
-            speed,
-            curveReady: curveRef.current !== null,
-        })
-
-        elapsedMsRef.current = 0
-        frameCountRef.current = 0
     })
 
     return null
@@ -270,6 +334,11 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
         return [0, 6000, 0]
     }, [initialCameraPose])
 
+    const handleWarmupChange = useMemo(() => setTerrainReady, [])
+    const handleMapViewReady = useMemo(() => (mv: MapView) => {
+        mapViewRef.current = mv
+    }, [])
+
     return (
         <DroneFlightProvider>
             <div className="absolute inset-0 bg-slate-900 overflow-hidden">
@@ -297,10 +366,9 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                     {preparedTrack && (
                         <>
                             <TileMap
-                                onWarmupChange={setTerrainReady}
-                                onMapViewReady={(mv) => {
-                                    mapViewRef.current = mv
-                                }}
+                                preparedTrack={preparedTrack}
+                                onWarmupChange={handleWarmupChange}
+                                onMapViewReady={handleMapViewReady}
                                 worldOrigin={worldOrigin}
                             />
                             <group

@@ -4,10 +4,10 @@ import type { PreparedTrackData } from './trackPreparation'
 export const TERRAIN_OPERATIONAL_ZOOM = 13
 export const TERRAIN_COARSE_ZOOM = 8
 export const TERRAIN_BOUNDARY_ZOOM = 10
-export const TRACK_CORRIDOR_PADDING_M = 250
-export const SURROUNDING_PADDING_M = 600
+export const TRACK_CORRIDOR_PADDING_M = 8000
+export const SURROUNDING_PADDING_M = 15000
 export const MIN_OPERATIONAL_ZOOM = 11
-export const MAX_WARM_TILES = 180
+export const MAX_WARM_TILES = 1000
 export const LOCAL_WINDOW_SCALE = 3
 export const LOCAL_WINDOW_MIN_SIZE_M = 20_000
 export const LOCAL_WINDOW_MAX_SIZE_M = 120_000
@@ -46,11 +46,7 @@ export function createTileKey(zoom: number, x: number, y: number): string {
     return `${zoom}/${x}/${y}`
 }
 
-export function mercatorToTile(
-    zoom: number,
-    mercatorX: number,
-    mercatorY: number
-) {
+export function mercatorToTile(zoom: number, mercatorX: number, mercatorY: number) {
     const worldSize = MAX_MERCATOR * 2
     const tilesPerAxis = Math.pow(2, zoom)
     const normalizedX = (mercatorX + MAX_MERCATOR) / worldSize
@@ -83,14 +79,7 @@ function addTileRect(
 function buildTileRectSet(bounds: TileBounds, zoom: number) {
     const tileKeys = new Set<string>()
 
-    addTileRect(
-        tileKeys,
-        zoom,
-        bounds.minX,
-        bounds.maxX,
-        bounds.minY,
-        bounds.maxY
-    )
+    addTileRect(tileKeys, zoom, bounds.minX, bounds.maxX, bounds.minY, bounds.maxY)
 
     return tileKeys
 }
@@ -105,14 +94,10 @@ function buildTileSet(preparedTrack: PreparedTrackData, zoom: number) {
         addTileRect(
             tileKeys,
             zoom,
-            Math.min(current.mercatorX, next.mercatorX) -
-                TRACK_CORRIDOR_PADDING_M,
-            Math.max(current.mercatorX, next.mercatorX) +
-                TRACK_CORRIDOR_PADDING_M,
-            Math.min(current.mercatorY, next.mercatorY) -
-                TRACK_CORRIDOR_PADDING_M,
-            Math.max(current.mercatorY, next.mercatorY) +
-                TRACK_CORRIDOR_PADDING_M
+            Math.min(current.mercatorX, next.mercatorX) - TRACK_CORRIDOR_PADDING_M,
+            Math.max(current.mercatorX, next.mercatorX) + TRACK_CORRIDOR_PADDING_M,
+            Math.min(current.mercatorY, next.mercatorY) - TRACK_CORRIDOR_PADDING_M,
+            Math.max(current.mercatorY, next.mercatorY) + TRACK_CORRIDOR_PADDING_M
         )
     }
 
@@ -128,31 +113,14 @@ function buildTileSet(preparedTrack: PreparedTrackData, zoom: number) {
     return tileKeys
 }
 
-export function buildLocalTerrainBounds(
-    preparedTrack: PreparedTrackData
-): TileBounds {
-    const width = Math.max(
-        0,
-        preparedTrack.mercatorBounds.maxX - preparedTrack.mercatorBounds.minX
-    )
-    const height = Math.max(
-        0,
-        preparedTrack.mercatorBounds.maxY - preparedTrack.mercatorBounds.minY
-    )
+export function buildLocalTerrainBounds(preparedTrack: PreparedTrackData): TileBounds {
+    const width = Math.max(0, preparedTrack.mercatorBounds.maxX - preparedTrack.mercatorBounds.minX)
+    const height = Math.max(0, preparedTrack.mercatorBounds.maxY - preparedTrack.mercatorBounds.minY)
     const trackSpan = Math.max(width, height)
-    const sideLength = Math.min(
-        LOCAL_WINDOW_MAX_SIZE_M,
-        Math.max(LOCAL_WINDOW_MIN_SIZE_M, trackSpan * LOCAL_WINDOW_SCALE)
-    )
+    const sideLength = Math.min(LOCAL_WINDOW_MAX_SIZE_M, Math.max(LOCAL_WINDOW_MIN_SIZE_M, trackSpan * LOCAL_WINDOW_SCALE))
 
-    const centerX =
-        (preparedTrack.mercatorBounds.minX +
-            preparedTrack.mercatorBounds.maxX) /
-        2
-    const centerY =
-        (preparedTrack.mercatorBounds.minY +
-            preparedTrack.mercatorBounds.maxY) /
-        2
+    const centerX = (preparedTrack.mercatorBounds.minX + preparedTrack.mercatorBounds.maxX) / 2
+    const centerY = (preparedTrack.mercatorBounds.minY + preparedTrack.mercatorBounds.maxY) / 2
     const halfSide = sideLength / 2
 
     return {
@@ -163,19 +131,14 @@ export function buildLocalTerrainBounds(
     }
 }
 
-export function buildLocalRenderPlan(
-    preparedTrack: PreparedTrackData
-): LocalRenderPlan {
+export function buildLocalRenderPlan(preparedTrack: PreparedTrackData): LocalRenderPlan {
     const bounds = buildLocalTerrainBounds(preparedTrack)
     const tileKeys = buildTileRectSet(bounds, TERRAIN_BOUNDARY_ZOOM)
     let rootZoom = TERRAIN_BOUNDARY_ZOOM
     let topLeft = mercatorToTile(rootZoom, bounds.minX, bounds.maxY)
     let bottomRight = mercatorToTile(rootZoom, bounds.maxX, bounds.minY)
 
-    while (
-        (topLeft.x !== bottomRight.x || topLeft.y !== bottomRight.y) &&
-        rootZoom > 0
-    ) {
+    while ((topLeft.x !== bottomRight.x || topLeft.y !== bottomRight.y) && rootZoom > 0) {
         rootZoom--
         topLeft = mercatorToTile(rootZoom, bounds.minX, bounds.maxY)
         bottomRight = mercatorToTile(rootZoom, bounds.maxX, bounds.minY)
@@ -196,21 +159,40 @@ export function buildWarmupPlan(preparedTrack: PreparedTrackData): WarmupPlan {
     let targetZoom = TERRAIN_OPERATIONAL_ZOOM
     let tileKeys = buildTileSet(preparedTrack, targetZoom)
 
-    while (
-        tileKeys.size > MAX_WARM_TILES &&
-        targetZoom > MIN_OPERATIONAL_ZOOM
-    ) {
+    while (tileKeys.size > MAX_WARM_TILES && targetZoom > MIN_OPERATIONAL_ZOOM) {
         targetZoom--
         tileKeys = buildTileSet(preparedTrack, targetZoom)
+    }
+
+    // Expand the set to include all ancestors up to level 0.
+    // This allows O(1) lookup for any node level <= targetZoom.
+    const expandedKeys = new Set<string>(tileKeys)
+    for (const key of tileKeys) {
+        const [z, x, y] = key.split('/').map(Number)
+        let curZ = z - 1
+        let curX = Math.floor(x / 2)
+        let curY = Math.floor(y / 2)
+        while (curZ >= 0) {
+            const ancestorKey = createTileKey(curZ, curX, curY)
+            if (expandedKeys.has(ancestorKey)) break
+            expandedKeys.add(ancestorKey)
+            curZ--
+            curX = Math.floor(curX / 2)
+            curY = Math.floor(curY / 2)
+        }
     }
 
     return {
         targetZoom,
         coarseZoom: TERRAIN_COARSE_ZOOM,
-        tileKeys: [...tileKeys].sort(),
+        tileKeys: [...expandedKeys].sort(),
     }
 }
 
+/**
+ * Checks if a node (at any level) intersects the corridor defined at targetZoom.
+ * Optimized to O(1) by using the expanded tile set containing all ancestors.
+ */
 export function nodeIntersectsTileSet(
     nodeLevel: number,
     nodeX: number,
@@ -218,23 +200,16 @@ export function nodeIntersectsTileSet(
     targetZoom: number,
     tileKeys: Set<string>
 ): boolean {
+    // If we are at a higher detail level than the corridor's defined resolution,
+    // we check if the ANCESTOR at the targetZoom level is in the set.
     if (nodeLevel > targetZoom) {
-        return tileKeys.has(createTileKey(nodeLevel, nodeX, nodeY))
+        const scale = Math.pow(2, nodeLevel - targetZoom)
+        const ancestorX = Math.floor(nodeX / scale)
+        const ancestorY = Math.floor(nodeY / scale)
+        return tileKeys.has(createTileKey(targetZoom, ancestorX, ancestorY))
     }
 
-    const scale = Math.pow(2, targetZoom - nodeLevel)
-    const startX = nodeX * scale
-    const startY = nodeY * scale
-    const endX = startX + scale - 1
-    const endY = startY + scale - 1
-
-    for (let x = startX; x <= endX; x++) {
-        for (let y = startY; y <= endY; y++) {
-            if (tileKeys.has(createTileKey(targetZoom, x, y))) {
-                return true
-            }
-        }
-    }
-
-    return false
+    // For nodeLevel <= targetZoom, we just check if the node's key is in the set.
+    // Because we've added all ancestors to the set, this is O(1).
+    return tileKeys.has(createTileKey(nodeLevel, nodeX, nodeY))
 }
