@@ -2,7 +2,6 @@ import { useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
 import { useDroneFlight } from '../../contexts/DroneFlightContext'
-import { INITIAL_COORDS } from '../../lib/constants'
 import type { PreparedTrackData } from '../../lib/trackPreparation'
 import { interpolateSmoothedSpeedAtDistance } from '../../lib/trackTelemetry'
 
@@ -21,17 +20,19 @@ interface InitialCameraPose {
     target: Vector3
 }
 
-function applyWorldOffset(position: Vector3) {
-    position.x -= INITIAL_COORDS.x
-    position.z += INITIAL_COORDS.y
+function applyWorldOffset(position: Vector3, worldOrigin: { x: number; y: number }) {
+    position.x -= worldOrigin.x
+    position.z += worldOrigin.y
 }
 
 export function DroneCamera({
     preparedTrack,
     initialCameraPose,
+    worldOrigin,
 }: {
     preparedTrack: PreparedTrackData | null
     initialCameraPose: InitialCameraPose | null
+    worldOrigin: { x: number; y: number }
 }) {
     const { camera } = useThree()
     const { isPlaying, setIsPlaying, speed, mode, progressRef, curveRef } =
@@ -60,7 +61,7 @@ export function DroneCamera({
         }
 
         curve.getPointAt(t, droneWorldPos.current)
-        applyWorldOffset(droneWorldPos.current)
+        applyWorldOffset(droneWorldPos.current, worldOrigin)
 
         curve.getTangentAt(t, rawTangent.current)
 
@@ -73,8 +74,7 @@ export function DroneCamera({
             droneWorldPos.current.x +
                 smoothBehind.current.x * CAM_BEHIND_METERS,
             droneWorldPos.current.y + CAM_ABOVE_METERS,
-            droneWorldPos.current.z +
-                smoothBehind.current.z * CAM_BEHIND_METERS
+            droneWorldPos.current.z + smoothBehind.current.z * CAM_BEHIND_METERS
         )
         transitionTargetLookAt.current.copy(droneWorldPos.current)
 
@@ -182,7 +182,7 @@ export function DroneCamera({
         const t = progressRef.current
 
         curve.getPointAt(t, droneWorldPos.current)
-        applyWorldOffset(droneWorldPos.current)
+        applyWorldOffset(droneWorldPos.current, worldOrigin)
         curve.getTangentAt(t, rawTangent.current)
         const lerpFactor = 1 - Math.pow(1 - BEHIND_LERP, delta * 60)
         smoothBehind.current

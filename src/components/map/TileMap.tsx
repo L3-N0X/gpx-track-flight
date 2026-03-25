@@ -6,7 +6,6 @@ import {
     MapView,
 } from 'geo-three'
 import { useEffect, useState } from 'react'
-import { INITIAL_COORDS } from '../../lib/constants'
 import {
     AWSTerrariumElevationProvider,
     EsriWorldImageryProvider,
@@ -15,17 +14,15 @@ import {
 
 const TERRAIN_GEOMETRY_SEGMENTS = 16
 
-MapNodeGeometry.buildSkirt = function () {
-    return
-}
-
 MapNode.prototype.frustumCulled = false
 
 interface TileMapProps {
     onWarmupChange: (ready: boolean) => void
+    onMapViewReady?: (mapView: MapView) => void
+    worldOrigin: { x: number; y: number }
 }
 
-export function TileMap({ onWarmupChange }: TileMapProps) {
+export function TileMap({ onWarmupChange, onMapViewReady, worldOrigin }: TileMapProps) {
     const [mapView, setMapView] = useState<MapView | null>(null)
 
     useEffect(() => {
@@ -77,6 +74,7 @@ export function TileMap({ onWarmupChange }: TileMapProps) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setMapView(map)
         onWarmupChange(true)
+        onMapViewReady?.(map)
 
         return () => {
             onWarmupChange(false)
@@ -90,7 +88,7 @@ export function TileMap({ onWarmupChange }: TileMapProps) {
 
     return (
         <group
-            position={[-INITIAL_COORDS.x, 0, INITIAL_COORDS.y]}
+            position={[-worldOrigin.x, 0, worldOrigin.y]}
             name="TileMapGroup"
         >
             <primitive object={mapView} />

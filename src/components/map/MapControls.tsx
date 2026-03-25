@@ -6,7 +6,11 @@ const MOVEMENT_SPEED = 1000 // Base speed
 const BOOST_MULTIPLIER = 10
 const ROTATION_SPEED = 0.003
 
-export function MapControls({ cameraSyncToken = 0 }: { cameraSyncToken?: number }) {
+export function MapControls({
+    cameraSyncToken = 0,
+}: {
+    cameraSyncToken?: number
+}) {
     const { camera, gl } = useThree()
 
     // State references for performance (no re-renders on every frame input change)

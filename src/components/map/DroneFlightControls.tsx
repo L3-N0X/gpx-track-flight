@@ -87,7 +87,7 @@ export function DroneFlightControls({
                                         ? 'Preparing Flight'
                                         : isPlaying
                                           ? 'Pause'
-                                        : 'Play Flight'}
+                                          : 'Play Flight'}
                                 </button>
                             </div>
 

@@ -97,7 +97,9 @@ export function computeTrackProfileMetrics(
     }
 }
 
-export function computeTrackSpeedMetrics(speedsKmh: number[]): TrackSpeedMetrics {
+export function computeTrackSpeedMetrics(
+    speedsKmh: number[]
+): TrackSpeedMetrics {
     if (speedsKmh.length === 0) {
         return { smoothedSpeedsKmh: [] }
     }
@@ -177,8 +179,7 @@ export function interpolateSmoothedElevationAtDistance(
         return leftPoint.smoothedElevationM
     }
 
-    const t =
-        (targetDistanceM - leftPoint.distanceFromStartM) / segmentDistance
+    const t = (targetDistanceM - leftPoint.distanceFromStartM) / segmentDistance
 
     return lerp(leftPoint.smoothedElevationM, rightPoint.smoothedElevationM, t)
 }
@@ -215,8 +216,7 @@ export function interpolateSmoothedSpeedAtDistance(
         return leftPoint.smoothedSpeedKmh
     }
 
-    const t =
-        (targetDistanceM - leftPoint.distanceFromStartM) / segmentDistance
+    const t = (targetDistanceM - leftPoint.distanceFromStartM) / segmentDistance
 
     return lerp(leftPoint.smoothedSpeedKmh, rightPoint.smoothedSpeedKmh, t)
 }
@@ -238,7 +238,10 @@ export function buildTelemetryWindow(
 
     const trackStartM = points[0].distanceFromStartM
     const trackEndM = points[points.length - 1].distanceFromStartM
-    const startDistanceM = Math.max(trackStartM, currentDistanceM - windowRadiusM)
+    const startDistanceM = Math.max(
+        trackStartM,
+        currentDistanceM - windowRadiusM
+    )
     const endDistanceM = Math.min(trackEndM, currentDistanceM + windowRadiusM)
     const samples: TelemetryWindowSample[] = [
         {

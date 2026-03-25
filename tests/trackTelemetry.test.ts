@@ -121,7 +121,9 @@ describe('track telemetry helpers', () => {
             smoothedSpeedKmh: metrics.smoothedSpeedsKmh[index] ?? 0,
         }))
 
-        expect(interpolateSmoothedSpeedAtDistance(telemetryPoints, 650)).toBe(18)
+        expect(interpolateSmoothedSpeedAtDistance(telemetryPoints, 650)).toBe(
+            18
+        )
     })
 
     test('finds current positions and stable elevation labels', () => {

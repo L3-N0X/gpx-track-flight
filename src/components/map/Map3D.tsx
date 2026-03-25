@@ -1,5 +1,6 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { MapView } from 'geo-three'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Vector3 } from 'three'
 import {
@@ -20,84 +21,36 @@ import {
 } from './MapDebugOverlay'
 import { TileMap } from './TileMap'
 import { Track } from './Track'
+import { computeCameraPose, type CameraPose } from '../../lib/cameraUtils'
 
-const INITIAL_CAMERA_BEHIND_METERS = 180
-const INITIAL_CAMERA_ABOVE_METERS = 260
-const INITIAL_CAMERA_LOOKAHEAD_METERS = 110
+function MapLODUpdater({
+    mapViewRef,
+}: {
+    mapViewRef: React.MutableRefObject<MapView | null>
+}) {
+    const { camera, gl, scene } = useThree()
 
-interface InitialCameraPose {
-    position: Vector3
-    target: Vector3
-}
-
-function findLookAheadPoint(
-    points: Vector3[],
-    minimumDistanceM: number
-): Vector3 | null {
-    if (points.length < 2) {
-        return null
-    }
-
-    const startPoint = points[0]
-
-    for (let i = 1; i < points.length; i++) {
-        if (points[i].distanceTo(startPoint) >= minimumDistanceM) {
-            return points[i]
+    useFrame(() => {
+        const mapView = mapViewRef.current
+        if (mapView?.lod) {
+            mapView.lod.updateLOD(mapView, camera, gl, scene)
         }
-    }
+    })
 
-    return points[points.length - 1] ?? null
-}
-
-function computeInitialCameraPose(
-    alignedPathPoints: Vector3[]
-): InitialCameraPose | null {
-    const startPoint = alignedPathPoints[0]
-    if (!startPoint) {
-        return null
-    }
-
-    const trackOffset = new Vector3(-INITIAL_COORDS.x, 0, INITIAL_COORDS.y)
-    const startWorld = startPoint.clone().add(trackOffset)
-    const aheadPoint =
-        findLookAheadPoint(alignedPathPoints, INITIAL_CAMERA_LOOKAHEAD_METERS) ??
-        startPoint
-    const aheadWorld = aheadPoint.clone().add(trackOffset)
-    const forward = aheadWorld.clone().sub(startWorld)
-
-    if (forward.lengthSq() < 1e-6) {
-        return {
-            position: startWorld.clone().add(new Vector3(0, 250, 250)),
-            target: startWorld,
-        }
-    }
-
-    forward.normalize()
-
-    const position = startWorld
-        .clone()
-        .sub(forward.clone().multiplyScalar(INITIAL_CAMERA_BEHIND_METERS))
-        .add(new Vector3(0, INITIAL_CAMERA_ABOVE_METERS, 0))
-
-    const target = startWorld
-        .clone()
-        .add(forward.multiplyScalar(INITIAL_CAMERA_LOOKAHEAD_METERS))
-        .add(new Vector3(0, 8, 0))
-
-    return { position, target }
+    return null
 }
 
 function CameraSetup({
     initialCameraPose,
     applyToken,
 }: {
-    initialCameraPose: InitialCameraPose | null
+    initialCameraPose: CameraPose | null
     applyToken: number
 }) {
     const { camera } = useThree()
 
     useEffect(() => {
-        if (!initialCameraPose || applyToken === 0) {
+        if (!initialCameraPose) {
             return
         }
 
@@ -251,10 +204,18 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
         }
     }, [gpxContent])
 
+    const worldOrigin = useMemo(() => {
+        if (preparedTrack && preparedTrack.points.length > 0) {
+            const p = preparedTrack.points[0]
+            return { x: p.mercatorX, y: p.mercatorY }
+        }
+        return INITIAL_COORDS
+    }, [preparedTrack])
+
     const [terrainReady, setTerrainReady] = useState(false)
     const [trackReady, setTrackReady] = useState(false)
     const [initialCameraPose, setInitialCameraPose] =
-        useState<InitialCameraPose | null>(null)
+        useState<CameraPose | null>(null)
     const [cameraApplyToken, setCameraApplyToken] = useState(0)
     const [isDebugOpen, setIsDebugOpen] = useState(false)
     const [debugMetrics, setDebugMetrics] = useState<MapDebugMetrics | null>(
@@ -262,6 +223,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
     )
     const [samplingStatus, setSamplingStatus] =
         useState<TrackSamplingStatus | null>(null)
+    const mapViewRef = useRef<MapView | null>(null)
 
     const [prevTrack, setPrevTrack] = useState(preparedTrack)
 
@@ -269,9 +231,19 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
         setPrevTrack(preparedTrack)
         setTerrainReady(false)
         setTrackReady(false)
-        setInitialCameraPose(null)
-        setCameraApplyToken(0)
         setSamplingStatus(null)
+
+        // Compute rough initial camera pose immediately from unprepared points
+        if (preparedTrack) {
+            const pose = computeCameraPose(preparedTrack.points, worldOrigin)
+            setInitialCameraPose(pose)
+            if (pose) {
+                setCameraApplyToken((current) => current + 1)
+            }
+        } else {
+            setInitialCameraPose(null)
+            setCameraApplyToken(0)
+        }
     }
 
     useEffect(() => {
@@ -287,12 +259,23 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
         }
     }, [])
 
+    const initialCanvasPosition: [number, number, number] = useMemo(() => {
+        if (initialCameraPose) {
+            return [
+                initialCameraPose.position.x,
+                initialCameraPose.position.y,
+                initialCameraPose.position.z,
+            ]
+        }
+        return [0, 6000, 0]
+    }, [initialCameraPose])
+
     return (
         <DroneFlightProvider>
             <div className="absolute inset-0 bg-slate-900 overflow-hidden">
                 <Canvas
                     camera={{
-                        position: [0, 6000, 0],
+                        position: initialCanvasPosition,
                         fov: 60,
                         near: 10,
                         far: 1e6,
@@ -302,6 +285,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                         initialCameraPose={initialCameraPose}
                         applyToken={cameraApplyToken}
                     />
+                    <MapLODUpdater mapViewRef={mapViewRef} />
 
                     <ambientLight intensity={0.5} />
                     <directionalLight
@@ -312,20 +296,28 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
 
                     {preparedTrack && (
                         <>
-                            <TileMap onWarmupChange={setTerrainReady} />
+                            <TileMap
+                                onWarmupChange={setTerrainReady}
+                                onMapViewReady={(mv) => {
+                                    mapViewRef.current = mv
+                                }}
+                                worldOrigin={worldOrigin}
+                            />
                             <group
                                 position={[
-                                    -INITIAL_COORDS.x,
+                                    -worldOrigin.x,
                                     0,
-                                    INITIAL_COORDS.y,
+                                    worldOrigin.y,
                                 ]}
                             >
                                 <Track
                                     preparedTrack={preparedTrack}
                                     onReadyChange={setTrackReady}
                                     onInitialCameraPoseReady={(points) => {
-                                        const pose =
-                                            computeInitialCameraPose(points)
+                                        const pose = computeCameraPose(
+                                            points,
+                                            worldOrigin
+                                        )
                                         setInitialCameraPose(pose)
                                         if (pose) {
                                             setCameraApplyToken(
@@ -343,6 +335,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                     <DroneCamera
                         preparedTrack={preparedTrack}
                         initialCameraPose={initialCameraPose}
+                        worldOrigin={worldOrigin}
                     />
                     <DebugProbe onMetricsChange={setDebugMetrics} />
                 </Canvas>
