@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Vector3 } from 'three'
+import { Raycaster, Vector3, type Object3D } from 'three'
 import { useDroneFlight } from '../../contexts/DroneFlightContext'
 import type { PreparedTrackData } from '../../lib/trackPreparation'
 import { interpolateSmoothedSpeedAtDistance } from '../../lib/trackTelemetry'
@@ -14,6 +14,12 @@ const CAM_ABOVE_METERS = 250
 const BEHIND_LERP = 0.04
 const MIN_TRACK_FLIGHT_SPEED_KMH = 5
 const FLIGHT_START_TRANSITION_SECONDS = 1.6
+const CAMERA_COLLISION_STEPS = 14
+const CAMERA_MAX_PITCH_RADIANS = (82 * Math.PI) / 180
+const CAMERA_COLLISION_PADDING_M = 24
+const CAMERA_RAY_START_OFFSET_M = 8
+const CAMERA_AVOIDANCE_LERP_UP = 0.32
+const CAMERA_AVOIDANCE_LERP_DOWN = 0.07
 
 interface InitialCameraPose {
     position: Vector3
@@ -25,6 +31,47 @@ function applyWorldOffset(position: Vector3, worldOrigin: { x: number; y: number
     position.z += worldOrigin.y
 }
 
+function hasTerrainBetweenThumbAndCamera(
+    raycaster: Raycaster,
+    terrainGroup: Object3D | undefined,
+    thumbPosition: Vector3,
+    cameraPosition: Vector3,
+    direction: Vector3
+) {
+    if (!terrainGroup) {
+        return false
+    }
+
+    const distance = cameraPosition.distanceTo(thumbPosition)
+    if (distance <= CAMERA_RAY_START_OFFSET_M + CAMERA_COLLISION_PADDING_M) {
+        return false
+    }
+
+    direction.copy(cameraPosition).sub(thumbPosition).normalize()
+    raycaster.near = CAMERA_RAY_START_OFFSET_M
+    raycaster.far = distance - CAMERA_COLLISION_PADDING_M
+    raycaster.set(thumbPosition, direction)
+
+    return raycaster
+        .intersectObject(terrainGroup, true)
+        .some((hit) => hit.object.visible)
+}
+
+function setCameraPositionAtPitch(
+    cameraPosition: Vector3,
+    thumbPosition: Vector3,
+    horizontalDirection: Vector3,
+    pitch: number,
+    distance: number
+) {
+    const horizontalDistance = Math.cos(pitch) * distance
+
+    cameraPosition
+        .copy(thumbPosition)
+        .addScaledVector(horizontalDirection, horizontalDistance)
+    cameraPosition.y += Math.sin(pitch) * distance
+}
+
 export function DroneCamera({
     preparedTrack,
     initialCameraPose,
@@ -34,12 +81,18 @@ export function DroneCamera({
     initialCameraPose: InitialCameraPose | null
     worldOrigin: { x: number; y: number }
 }) {
-    const { camera } = useThree()
+    const { camera, scene } = useThree()
     const { isPlaying, setIsPlaying, speed, mode, progressRef, curveRef } =
         useDroneFlight()
 
     const droneWorldPos = useRef(new Vector3())
     const rawTangent = useRef(new Vector3())
+    const candidateCameraPos = useRef(new Vector3())
+    const cameraToThumb = useRef(new Vector3())
+    const horizontalCameraOffset = useRef(new Vector3())
+    const rayDirection = useRef(new Vector3())
+    const terrainRaycaster = useRef(new Raycaster())
+    const smoothedAvoidancePitch = useRef<number | null>(null)
     const transitionStartPos = useRef(new Vector3())
     const transitionStartTarget = useRef(new Vector3())
     const transitionTargetPos = useRef(new Vector3())
@@ -54,7 +107,98 @@ export function DroneCamera({
     // gradually, so the camera glides around corners.
     const smoothBehind = useRef(new Vector3(0, 0, 1)) // arbitrary initial dir
 
-    const updateFlightCameraPose = (t: number) => {
+    const avoidTerrainOcclusion = (cameraPosition: Vector3, delta: number) => {
+        cameraToThumb.current.copy(cameraPosition).sub(droneWorldPos.current)
+        const distance = cameraToThumb.current.length()
+        if (distance <= 1e-6) {
+            return
+        }
+
+        horizontalCameraOffset.current.set(
+            cameraToThumb.current.x,
+            0,
+            cameraToThumb.current.z
+        )
+        if (horizontalCameraOffset.current.lengthSq() <= 1e-6) {
+            return
+        }
+
+        horizontalCameraOffset.current.normalize()
+
+        const startPitch = Math.atan2(
+            cameraToThumb.current.y,
+            Math.hypot(cameraToThumb.current.x, cameraToThumb.current.z)
+        )
+        const maxPitch = Math.max(startPitch, CAMERA_MAX_PITCH_RADIANS)
+        let targetPitch = startPitch
+        const terrainGroup = scene.getObjectByName('TileMapGroup')
+
+        if (
+            hasTerrainBetweenThumbAndCamera(
+                terrainRaycaster.current,
+                terrainGroup,
+                droneWorldPos.current,
+                cameraPosition,
+                rayDirection.current
+            )
+        ) {
+            targetPitch = maxPitch
+
+            for (let step = 1; step <= CAMERA_COLLISION_STEPS; step++) {
+                const candidatePitch =
+                    startPitch +
+                    (maxPitch - startPitch) *
+                        (step / CAMERA_COLLISION_STEPS)
+
+                setCameraPositionAtPitch(
+                    candidateCameraPos.current,
+                    droneWorldPos.current,
+                    horizontalCameraOffset.current,
+                    candidatePitch,
+                    distance
+                )
+
+                if (
+                    !hasTerrainBetweenThumbAndCamera(
+                        terrainRaycaster.current,
+                        terrainGroup,
+                        droneWorldPos.current,
+                        candidateCameraPos.current,
+                        rayDirection.current
+                    )
+                ) {
+                    targetPitch = candidatePitch
+                    break
+                }
+            }
+        }
+
+        const currentPitch = Math.max(
+            smoothedAvoidancePitch.current ?? startPitch,
+            startPitch
+        )
+        const lerpBase =
+            targetPitch > currentPitch
+                ? CAMERA_AVOIDANCE_LERP_UP
+                : CAMERA_AVOIDANCE_LERP_DOWN
+        const lerpFactor = 1 - Math.pow(1 - lerpBase, delta * 60)
+        const nextPitch = currentPitch + (targetPitch - currentPitch) * lerpFactor
+
+        smoothedAvoidancePitch.current =
+            Math.abs(nextPitch - startPitch) < 0.001 ? startPitch : nextPitch
+
+        if (smoothedAvoidancePitch.current > startPitch + 0.001) {
+            setCameraPositionAtPitch(
+                cameraPosition,
+                droneWorldPos.current,
+                horizontalCameraOffset.current,
+                smoothedAvoidancePitch.current,
+                distance
+            )
+        }
+    }
+
+    const updateFlightCameraPose = (t: number, delta: number) => {
         const curve = curveRef.current
         if (!curve) {
             return null
@@ -76,6 +220,7 @@ export function DroneCamera({
             droneWorldPos.current.y + CAM_ABOVE_METERS,
             droneWorldPos.current.z + smoothBehind.current.z * CAM_BEHIND_METERS
         )
+        avoidTerrainOcclusion(transitionTargetPos.current, delta)
         transitionTargetLookAt.current.copy(droneWorldPos.current)
 
         return {
@@ -100,6 +245,7 @@ export function DroneCamera({
                     .copy(camera.position)
                     .add(cameraForward.current.multiplyScalar(600))
                 smoothBehind.current.set(0, 0, 1)
+                smoothedAvoidancePitch.current = null
             } else {
                 isTransitioning.current = false
             }
@@ -107,12 +253,13 @@ export function DroneCamera({
 
         if (!isPlaying) {
             isTransitioning.current = false
+            smoothedAvoidancePitch.current = null
             wasPlaying.current = false
             return
         }
 
         if (isTransitioning.current) {
-            const initialPose = updateFlightCameraPose(0)
+            const initialPose = updateFlightCameraPose(0, delta)
             if (!initialPose) {
                 wasPlaying.current = isPlaying
                 return
@@ -194,7 +341,9 @@ export function DroneCamera({
         const camY = droneWorldPos.current.y + CAM_ABOVE_METERS
         const camZ =
             droneWorldPos.current.z + smoothBehind.current.z * CAM_BEHIND_METERS
-        camera.position.set(camX, camY, camZ)
+        transitionTargetPos.current.set(camX, camY, camZ)
+        avoidTerrainOcclusion(transitionTargetPos.current, delta)
+        camera.position.copy(transitionTargetPos.current)
 
         camera.lookAt(droneWorldPos.current)
         wasPlaying.current = isPlaying
