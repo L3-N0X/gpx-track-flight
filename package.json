@@ -8,7 +8,7 @@
         "dev:frontend": "bunx vite",
         "dev:backend": "bun --hot run server.ts",
         "build": "tsc -b && bunx --bun vite build",
-        "lint": "eslint .",
+        "lint": "eslint . --cache --ext .ts,.tsx",
         "preview": "vite preview",
         "format": "bunx prettier --write ."
     },

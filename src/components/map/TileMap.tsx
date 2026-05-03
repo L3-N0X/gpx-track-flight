@@ -1,6 +1,6 @@
 import { LODRaycast, MapHeightNode, MapNode, MapView } from 'geo-three'
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { Vector3 } from 'three'
+import { Box3, Vector3, type BufferGeometry, type Material, type Texture } from 'three'
 import { useFrame } from '@react-three/fiber'
 import { AWSTerrariumElevationProvider, EsriWorldImageryProvider, MAX_ZOOM } from './GeoProviders'
 import type { PreparedTrackData } from '../../lib/trackPreparation'
@@ -16,28 +16,48 @@ let totalGeometriesDisposed = 0
 let activeMapNodeGeometries = 0
 
 // ✅ STABILITY: Expand bounding boxes for culling and track disposal.
-// const originalCreateGeometry = MapNode.prototype.createGeometry
-// const originalDispose = MapNode.prototype.dispose
+const originalLoadHeightGeometry = MapHeightNode.prototype.loadHeightGeometry
+const originalDispose = MapNode.prototype.dispose
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-MapNode.prototype.createGeometry = function (...args: any[]) {
-    // @ts-expect-error: override geo-three internal
-    originalCreateGeometry.apply(this, args)
-    if (this.geometry) {
+type TexturedMaterial = Material & {
+    map?: Texture | null
+    normalMap?: Texture | null
+    displacementMap?: Texture | null
+}
+
+function expandGeometryBounds(geometry: BufferGeometry) {
+    if (!geometry.boundingBox) {
+        geometry.computeBoundingBox()
+    }
+
+    const box = geometry.boundingBox as Box3
+    box.min.y = -2000
+    box.max.y = 10000
+
+    if (!geometry.boundingSphere) {
+        geometry.computeBoundingSphere()
+    }
+    geometry.boundingSphere?.set(box.getCenter(new Vector3()), box.getSize(new Vector3()).length() / 2)
+}
+
+function disposeMaterialTextures(material: Material) {
+    const texturedMaterial = material as TexturedMaterial
+    texturedMaterial.map?.dispose()
+    texturedMaterial.normalMap?.dispose()
+    texturedMaterial.displacementMap?.dispose()
+}
+
+MapHeightNode.prototype.loadHeightGeometry = async function () {
+    const previousGeometry = this.geometry
+    const result = await originalLoadHeightGeometry.apply(this)
+
+    if (this.geometry && this.geometry !== previousGeometry) {
         totalGeometriesCreated++
         activeMapNodeGeometries++
-        if (!this.geometry.boundingBox) {
-            this.geometry.computeBoundingBox()
-        }
-        const box = this.geometry.boundingBox as Box3
-        box.min.y = -2000
-        box.max.y = 10000
-
-        if (!this.geometry.boundingSphere) {
-            this.geometry.computeBoundingSphere()
-        }
-        this.geometry.boundingSphere?.set(box.getCenter(new Vector3()), box.getSize(new Vector3()).length() / 2)
+        expandGeometryBounds(this.geometry)
     }
+
+    return result
 }
 
 // // Deep disposal to fix Three.js memory leaks
@@ -52,16 +72,11 @@ MapNode.prototype.dispose = function () {
         activeMapNodeGeometries--
     }
     if (this.material) {
-        // @ts-expect-error material can be array or single
         const materials = Array.isArray(this.material) ? this.material : [this.material]
         for (const mat of materials) {
-            if (mat.map) mat.map.dispose()
-            if (mat.normalMap) mat.normalMap.dispose()
-            if (mat.displacementMap) mat.displacementMap.dispose()
-            mat.dispose()
+            disposeMaterialTextures(mat)
         }
     }
-    // @ts-expect-error: override geo-three internal
     originalDispose.apply(this)
 }
 
