@@ -152,7 +152,7 @@ export class AWSTerrariumElevationProvider extends MapProvider {
                     const h = r * 256.0 + g + b / 256.0 - 32768.0
 
                     // Mountain scale exaggeration (so they don't look tiny from 6km up)
-                    const hExaggerated = h * 2.5
+                    const hExaggerated = h * 1 // no scaling anymore
 
                     // Encode to Mapbox
                     const value = Math.max(0, (hExaggerated + 10000) * 10)
