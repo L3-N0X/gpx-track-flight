@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import { UnitsUtils } from 'geo-three'
+import { datumsToSpherical } from '../../lib/mapUtils'
 import { Vector3, Mesh, Group } from 'three'
 import type { PreparedTrackData } from '../../lib/trackPreparation'
 import { sampleLocationElevation } from '../../lib/demSampling'
@@ -160,7 +160,7 @@ export function LocationLabels({
                     if (!keep) continue
 
                     // Project coordinates to Web Mercator
-                    const mercator = UnitsUtils.datumsToSpherical(
+                    const mercator = datumsToSpherical(
                         elem.lat,
                         elem.lon
                     )

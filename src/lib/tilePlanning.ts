@@ -1,4 +1,4 @@
-import { UnitsUtils } from 'geo-three'
+import { WEB_MERCATOR_MAX_EXTENT } from './mapUtils'
 import type { PreparedTrackData } from './trackPreparation'
 
 export const TERRAIN_OPERATIONAL_ZOOM = 13
@@ -35,7 +35,7 @@ export interface LocalRenderPlan {
     bounds: TileBounds
 }
 
-const MAX_MERCATOR = UnitsUtils.WEB_MERCATOR_MAX_EXTENT
+const MAX_MERCATOR = WEB_MERCATOR_MAX_EXTENT
 
 function clampTileCoordinate(value: number, zoom: number): number {
     const maxIndex = Math.pow(2, zoom) - 1

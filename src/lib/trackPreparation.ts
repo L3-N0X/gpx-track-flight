@@ -1,4 +1,4 @@
-import { UnitsUtils } from 'geo-three'
+import { datumsToSpherical } from './mapUtils'
 import { computeGpxStats, type GpxStats } from './gpxStats'
 import { parseGpx } from './gpxParser'
 import {
@@ -143,7 +143,7 @@ export function prepareTrackData(gpxContent: string): PreparedTrackData {
 
     for (let i = 0; i < gpxData.points.length; i++) {
         const point = gpxData.points[i]
-        const mercator = UnitsUtils.datumsToSpherical(point.lat, point.lon)
+        const mercator = datumsToSpherical(point.lat, point.lon)
 
         const shouldInclude =
             preparedPoints.length === 0 ||

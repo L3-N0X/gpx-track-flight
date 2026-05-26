@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Vector3, Euler } from 'three'
+import { Vector3, Euler, Raycaster } from 'three'
+import { useDroneFlight } from '../../contexts/DroneFlightContext'
 
 const MOVEMENT_SPEED = 1000 // Base speed
-const BOOST_MULTIPLIER = 10
+const BOOST_MULTIPLIER = 8
 const ROTATION_SPEED = 0.003
 
 export function MapControls({
@@ -11,7 +12,8 @@ export function MapControls({
 }: {
     cameraSyncToken?: number
 }) {
-    const { camera, gl } = useThree()
+    const { camera, gl, scene } = useThree()
+    const { isPlaying } = useDroneFlight()
 
     // State references for performance (no re-renders on every frame input change)
     const keys = useRef<{ [key: string]: boolean }>({})
@@ -19,6 +21,9 @@ export function MapControls({
     const euler = useRef(new Euler(0, 0, 0, 'YXZ'))
     const direction = useRef(new Vector3()) // Reused vector for movement
     const velocity = useRef(new Vector3())
+    const raycaster = useRef(new Raycaster())
+    const rayOrigin = useRef(new Vector3())
+    const rayDirection = useRef(new Vector3(0, -1, 0))
 
     useEffect(() => {
         // Inherit the camera pose that was computed during scene setup.
@@ -80,6 +85,12 @@ export function MapControls({
     }, [camera, gl.domElement])
 
     useFrame((_, delta) => {
+        // Keep euler.current in sync with the camera's actual rotation whenever not dragging.
+        // This prevents rotation jumps when transitioning from drone flight to manual controls.
+        if (!isDragging.current) {
+            euler.current.setFromQuaternion(camera.quaternion)
+        }
+
         // Reset velocity
         velocity.current.set(0, 0, 0)
 
@@ -108,8 +119,36 @@ export function MapControls({
         camera.translateY(direction.current.y)
         camera.translateZ(direction.current.z)
 
-        if (camera.position.y < 20) {
-            camera.position.setY(20)
+        if (!isPlaying) {
+            const terrainGroup = scene.getObjectByName('TileMapGroup')
+            if (terrainGroup) {
+                rayOrigin.current.set(camera.position.x, 10000, camera.position.z)
+                raycaster.current.set(rayOrigin.current, rayDirection.current)
+                raycaster.current.near = 1
+                raycaster.current.far = 20000
+
+                const intersections = raycaster.current.intersectObject(terrainGroup, true)
+                const hit = intersections.find((h) => h.object.visible)
+                if (hit) {
+                    const terrainHeight = hit.point.y
+                    const minHeight = terrainHeight + 15
+                    if (camera.position.y < minHeight) {
+                        camera.position.setY(minHeight)
+                    }
+                } else {
+                    if (camera.position.y < 20) {
+                        camera.position.setY(20)
+                    }
+                }
+            } else {
+                if (camera.position.y < 20) {
+                    camera.position.setY(20)
+                }
+            }
+        } else {
+            if (camera.position.y < 20) {
+                camera.position.setY(20)
+            }
         }
     })
 
