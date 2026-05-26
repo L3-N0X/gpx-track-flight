@@ -106,6 +106,7 @@ export function DroneCamera({
     // oscillates left/right as the tangent wiggles), we lerp this direction
     // gradually, so the camera glides around corners.
     const smoothBehind = useRef(new Vector3(0, 0, 1)) // arbitrary initial dir
+    const lastProgressRef = useRef(0)
 
     const avoidTerrainOcclusion = (cameraPosition: Vector3, delta: number) => {
         cameraToThumb.current.copy(cameraPosition).sub(droneWorldPos.current)
@@ -235,6 +236,34 @@ export function DroneCamera({
             return
         }
 
+        const t = progressRef.current
+        const progressChangedManually = !isPlaying && Math.abs(t - lastProgressRef.current) > 1e-5
+
+        if (progressChangedManually) {
+            isTransitioning.current = false
+            smoothedAvoidancePitch.current = null
+            
+            const curve = curveRef.current
+            curve.getPointAt(t, droneWorldPos.current)
+            applyWorldOffset(droneWorldPos.current, worldOrigin)
+            
+            curve.getTangentAt(t, rawTangent.current)
+            smoothBehind.current.copy(rawTangent.current).negate().normalize()
+            
+            const camX = droneWorldPos.current.x + smoothBehind.current.x * CAM_BEHIND_METERS
+            const camY = droneWorldPos.current.y + CAM_ABOVE_METERS
+            const camZ = droneWorldPos.current.z + smoothBehind.current.z * CAM_BEHIND_METERS
+            
+            transitionTargetPos.current.set(camX, camY, camZ)
+            avoidTerrainOcclusion(transitionTargetPos.current, 0.016)
+            camera.position.copy(transitionTargetPos.current)
+            camera.lookAt(droneWorldPos.current)
+            
+            lastProgressRef.current = t
+            wasPlaying.current = isPlaying
+            return
+        }
+
         if (isPlaying && !wasPlaying.current) {
             if (progressRef.current <= 0.0001 && initialCameraPose) {
                 isTransitioning.current = true
@@ -255,6 +284,7 @@ export function DroneCamera({
             isTransitioning.current = false
             smoothedAvoidancePitch.current = null
             wasPlaying.current = false
+            lastProgressRef.current = t
             return
         }
 
@@ -292,6 +322,7 @@ export function DroneCamera({
                 isTransitioning.current = false
             }
 
+            lastProgressRef.current = progressRef.current
             wasPlaying.current = isPlaying
             return
         }
@@ -326,11 +357,11 @@ export function DroneCamera({
             setIsPlaying(false)
         }
 
-        const t = progressRef.current
+        const nextT = progressRef.current
 
-        curve.getPointAt(t, droneWorldPos.current)
+        curve.getPointAt(nextT, droneWorldPos.current)
         applyWorldOffset(droneWorldPos.current, worldOrigin)
-        curve.getTangentAt(t, rawTangent.current)
+        curve.getTangentAt(nextT, rawTangent.current)
         const lerpFactor = 1 - Math.pow(1 - BEHIND_LERP, delta * 60)
         smoothBehind.current
             .lerp(rawTangent.current.clone().negate(), lerpFactor)
@@ -346,6 +377,7 @@ export function DroneCamera({
         camera.position.copy(transitionTargetPos.current)
 
         camera.lookAt(droneWorldPos.current)
+        lastProgressRef.current = progressRef.current
         wasPlaying.current = isPlaying
     })
 

@@ -21,6 +21,7 @@ import { TileMap } from './TileMap'
 import { Track } from './Track'
 import { LocationLabels } from './LocationLabels'
 import { computeCameraPose, type CameraPose } from '../../lib/cameraUtils'
+import { FlightRecorder } from './FlightRecorder'
 
 
 
@@ -336,6 +337,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                         initialCameraPose={initialCameraPose}
                         applyToken={cameraApplyToken}
                     />
+                    <FlightRecorder />
 
 
                     <ambientLight intensity={0.5} />
