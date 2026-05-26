@@ -20,6 +20,7 @@ import {
 } from './MapDebugOverlay'
 import { TileMap } from './TileMap'
 import { Track } from './Track'
+import { LocationLabels } from './LocationLabels'
 import { computeCameraPose, type CameraPose } from '../../lib/cameraUtils'
 
 function MapLODUpdater({
@@ -394,6 +395,9 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                                         }
                                     }}
                                     onSamplingStatusChange={setSamplingStatus}
+                                />
+                                <LocationLabels
+                                    preparedTrack={preparedTrack}
                                 />
                             </group>
                         </>

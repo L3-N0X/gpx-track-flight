@@ -191,3 +191,17 @@ export function applySampledTrackHeight(
 ) {
     return terrainHeight + clearance
 }
+
+export async function sampleLocationElevation(
+    lat: number,
+    lon: number
+): Promise<number> {
+    const tile = latLonToTileCoordinate(lat, lon, TERRARIUM_ZOOM)
+    const tileSample = await fetchTerrariumTile(
+        TERRARIUM_ZOOM,
+        tile.x,
+        tile.y
+    )
+    return sampleHeight(tileSample, lat, lon)
+}
+
