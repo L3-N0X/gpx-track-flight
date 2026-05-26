@@ -77,7 +77,8 @@ function displaceGeometry(geometry: PlaneGeometry, elevationGrid: Float32Array, 
     // This ensures boundary terrain vertex shading is completely unaffected by the vertical skirt.
     geometry.computeVertexNormals();
     
-    // Second pass: pull down boundary vertices vertically
+    // Second pass: pull down boundary vertices vertically and copy boundary normals to skirt vertices
+    const normalAttr = geometry.getAttribute('normal');
     for (let r = 0; r < N; r++) {
         for (let c = 0; c < N; c++) {
             const idx = r * N + c;
@@ -90,11 +91,22 @@ function displaceGeometry(geometry: PlaneGeometry, elevationGrid: Float32Array, 
                 const targetIdx = targetR * N + targetC;
                 
                 positionAttr.setY(idx, heights[targetIdx] - skirtDepth);
+                
+                // Copy normal from the terrain edge vertex to the skirt vertex to ensure continuous lighting
+                if (normalAttr) {
+                    const nx = normalAttr.getX(targetIdx);
+                    const ny = normalAttr.getY(targetIdx);
+                    const nz = normalAttr.getZ(targetIdx);
+                    normalAttr.setXYZ(idx, nx, ny, nz);
+                }
             }
         }
     }
     
     positionAttr.needsUpdate = true;
+    if (normalAttr) {
+        normalAttr.needsUpdate = true;
+    }
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
 }
