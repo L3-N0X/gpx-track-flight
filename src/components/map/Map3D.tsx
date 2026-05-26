@@ -1,6 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { MapView } from 'geo-three'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
     DroneFlightProvider,
@@ -23,22 +22,7 @@ import { Track } from './Track'
 import { LocationLabels } from './LocationLabels'
 import { computeCameraPose, type CameraPose } from '../../lib/cameraUtils'
 
-function MapLODUpdater({
-    mapViewRef,
-}: {
-    mapViewRef: React.MutableRefObject<MapView | null>
-}) {
-    const { camera, gl, scene } = useThree()
 
-    useFrame(() => {
-        const mapView = mapViewRef.current
-        if (mapView?.lod) {
-            mapView.lod.updateLOD(mapView, camera, gl, scene)
-        }
-    })
-
-    return null
-}
 
 function CameraSetup({
     initialCameraPose,
@@ -288,7 +272,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
     )
     const [samplingStatus, setSamplingStatus] =
         useState<TrackSamplingStatus | null>(null)
-    const mapViewRef = useRef<MapView | null>(null)
+
 
     const [prevTrack, setPrevTrack] = useState(preparedTrack)
 
@@ -336,9 +320,6 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
     }, [initialCameraPose])
 
     const handleWarmupChange = useMemo(() => setTerrainReady, [])
-    const handleMapViewReady = useMemo(() => (mv: MapView) => {
-        mapViewRef.current = mv
-    }, [])
 
     return (
         <DroneFlightProvider>
@@ -355,7 +336,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                         initialCameraPose={initialCameraPose}
                         applyToken={cameraApplyToken}
                     />
-                    <MapLODUpdater mapViewRef={mapViewRef} />
+
 
                     <ambientLight intensity={0.5} />
                     <directionalLight
@@ -369,7 +350,6 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                             <TileMap
                                 preparedTrack={preparedTrack}
                                 onWarmupChange={handleWarmupChange}
-                                onMapViewReady={handleMapViewReady}
                                 worldOrigin={worldOrigin}
                             />
                             <group
