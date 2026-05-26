@@ -1,229 +1,124 @@
-# Vite + Bun + React + Shadcn/UI Boilerplate
+# GPX Track Flight 3D Visualizer
 
-A modern, full-stack boilerplate that combines the speed of Vite and Bun with the power of React and beautiful Shadcn/UI components. This template provides a solid foundation for building responsive web applications with TypeScript, dark mode support, and API integration.
+A high-performance, premium 3D GPX flight visualizer built with **React**, **Three.js**, and **React Three Fiber (R3F)**, powered by **Vite** and **Bun**. 
 
-## Features
+This application parses standard GPX files (mountain biking, hiking, road cycling, etc.), maps the track coordinates to 3D space, fetches matching satellite imagery and elevation data, and renders a cinematic, smooth drone-flight simulation following the GPX path.
 
-- ⚡ **Vite** - Lightning fast build tool and development server
-- 🏃 **Bun** - Fast HTTP server with hot reload support
-- ⚛️ **React 19** - Latest React with modern features
-- 🎨 **Shadcn/UI** - Beautiful, accessible component library
-- 📱 **Responsive Layout** - Mobile-first design with Tailwind CSS
-- 🧭 **React Router** - Client-side routing with type-safe routes
-- 🌙 **Dark Mode** - Built-in theme switching (light/dark/system)
-- 🔗 **API Integration** - Example API endpoints with CORS setup
-- 📦 **TypeScript** - Full type safety throughout the application
-- 🎯 **ESLint & Prettier** - Code formatting and linting
-- 🐳 **Docker** - Containerization ready with multi-stage build
+This is an **open-source, 100% free alternative** to **Relive** and **SportsTracks** visualizers. The application is already fully functional and ready to use, though active development is ongoing and additional features are planned. It is optimized for self-hosting, and pre-built Docker container builds are available directly from the **GitHub Packages** section of this repository.
 
-## Tech Stack
+---
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS
-- **UI Components**: Shadcn/UI (built on Radix UI)
-- **Build Tool**: Vite 6
-- **Runtime**: Bun
-- **Routing**: React Router 7
-- **Styling**: Tailwind CSS 4
+## ⚡ Key Features
+
+- 🛰️ **Custom Quadtree LOD Tiling Engine**: Ground-up R3F terrain engine replacing heavy libraries. Dynamically loads, subdivides, and simplifies terrain tiles on-the-fly based on camera distance, supporting up to level 17 high-resolution details.
+- 🏞️ **DEM Terrain Displacement**: Decodes AWS Terrarium RGB elevation tiles to raw height maps on the CPU, displacing tile mesh vertices to form accurate 3D mountains, ridges, and valleys.
+- 🌍 **Seamless Edges (Tile Skirts)**: Generates vertical skirts at tile boundaries and synchronizes boundary normal vectors. This seals visual gaps between adjacent Level-of-Detail (LOD) tiles without causing shading creases or "mosaic valleys".
+- 🎮 **Interactive Flight Scrubbing**: A custom, YouTube-style progress slider allowing real-time scrubbing. Dragging the slider automatically pauses the flight and snaps the camera instantly to that track point.
+- 🎥 **HD Video Recording (with UI Overlays)**: Records flights directly in-browser using the native Screen Capture API. Captures the full tab viewport (WebGL + HTML UI stats/telemetry overlays) at a crisp **15 Mbps bitrate**, exporting to **H.264 MP4** or high-quality WebM.
+- 🛸 **Cinematic Drone Camera**: Follows the track smoothly using a Catmull-Rom spline path. Features corner-smoothing, look-ahead target prediction, automatic terrain collision avoidance, and smooth takeoff transitions.
+- 🕹️ **Free-Roam Camera**: Pause the flight to explore the 3D map manually using standard FPS keys (`W`, `A`, `S`, `D` for horizontal movement, `Q`/`E` for altitude, and `Shift` for speed boost).
+- ⛰️ **Anti-Clipping Protection**: In free-roam mode, the camera shoots a vertical raycast downwards and clamps the camera height to a minimum of **15 meters above the local terrain**, preventing the view from slipping under the map.
+- 🏷️ **3D Billboarding Labels**: Renders village and city labels dynamically in 3D space, which orient towards the camera and adjust visibility based on altitude and settlement scale.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Runtime**: [Bun](https://bun.sh/) (Fast package manager & bundler)
+- **Frontend Core**: React 19, TypeScript
+- **3D Graphics**: Three.js, React Three Fiber (`@react-three/fiber`)
+- **Styling**: Tailwind CSS
 - **Icons**: Lucide React
-- **Development**: ESLint, Prettier, Hot Module Replacement
+- **Build Tool**: Vite 8 (Lightning-fast HMR and bundling)
 
-## Project Structure
+---
+
+## 📂 Project Structure
 
 ```raw
 ├── src/
-│   ├── components/         # Reusable UI components
-│   │   ├── ui/             # Shadcn/UI components
-│   │   ├── layout.tsx      # Main layout component
-│   │   ├── navbar.tsx      # Navigation bar
-│   │   ├── mobile-nav.tsx  # Mobile navigation
-│   │   ├── mode-toggle.tsx # Dark mode toggle
-│   │   └── api-test.tsx    # API testing component
-│   ├── pages/              # Page components
-│   ├── hooks/              # Custom React hooks
-│   ├── contexts/           # React contexts
-│   ├── providers/          # Provider components
-│   ├── lib/                # Utility functions
-│   └── routes.tsx          # Route definitions
-├── server.ts               # Bun HTTP server
+│   ├── components/         # React components
+│   │   ├── map/            # 3D Map, Camera, Track, Labels & UI Overlays
+│   │   │   ├── DroneCamera.tsx          # Follow camera logic & collision avoidance
+│   │   │   ├── DroneFlightControls.tsx  # Flight playback, speed, mode & slider UI
+│   │   │   ├── FlightRecorder.tsx       # Screen/tab recorder engine (MediaRecorder)
+│   │   │   ├── FlightTelemetryOverlay.tsx# Dynamic speed, incline & elevation profile chart
+│   │   │   ├── LocationLabels.tsx       # 3D billboard labels for cities
+│   │   │   ├── Map3D.tsx                # Canvas entrypoint & scene lighting setup
+│   │   │   ├── MapControls.tsx          # Free roam camera controls & anti-clip clamping
+│   │   │   ├── TileMap.tsx              # Custom Quadtree LOD terrain renderer
+│   │   │   └── Track.tsx                # 3D track line renderer
+│   ├── contexts/           # React context providers (DroneFlightContext)
+│   ├── lib/                # Mathematical helpers & data loaders
+│   │   ├── mapUtils.ts     # Web Mercator projections & coordinate systems
+│   │   ├── mapTileLoader.ts# Image & AWS DEM elevation fetching, decoding & caching
+│   │   ├── demSampling.ts  # CPU-side height mapping & track elevation snapping
+│   │   └── trackTelemetry.ts# Telemetry stats, gradients & local elevation charts
+│   ├── App.tsx             # Root React component
+│   └── main.tsx            # Entrypoint
+├── server.ts               # Local Bun production release server
 ├── vite.config.ts          # Vite configuration
-├── Dockerfile              # Docker configuration
-├── docker-compose.yml      # Docker Compose setup
-└── package.json            # Dependencies and scripts
+└── package.json            # Script definitions and npm packages
 ```
 
-## Getting Started
+---
 
-### Prerequisites
+## 🚀 Getting Started
 
-- [Bun](https://bun.sh/) (latest version)
-- Node.js 18+ (for compatibility)
+### 1. Installation
 
-### Installation
-
-1. Clone the repository:
+Ensure you have [Bun](https://bun.sh/) installed.
 
 ```bash
-git clone <repository-url>
+# Clone the project and navigate to the directory
 cd gpx-track-flight
-```
 
-2. Install dependencies:
-
-```bash
+# Install all dependencies
 bun install
 ```
 
-3. Start the development servers:
-
-**Option 1: Frontend only (for UI development)**
+### 2. Running in Development
 
 ```bash
-bun run dev:frontend
+# Run the Vite development server
+bun run dev
 ```
 
-This starts the Vite dev server on `http://localhost:5174`
+This will spin up the local development site, typically at `http://localhost:5173`. Open it in your browser and upload any GPX track file to visualize.
 
-**Option 2: Full-stack development**
+### 3. Production Build
+
+Verify that the TypeScript types compile and the bundle is compiled successfully:
 
 ```bash
-# Terminal 1: Start the backend server
-bun run dev:backend
-
-# Terminal 2: Start the frontend server
-bun run dev:frontend
+# Compile and build the production static files
+bun run build
 ```
 
-The application will be available at:
+The resulting assets will be compiled into the `dist/` folder.
 
-- Frontend: `http://localhost:5174`
-- Backend API: `http://localhost:3001`
+---
 
-### Available Scripts
+## ⚙️ How it Works
 
-- `bun run dev:frontend` - Start Vite development server
-- `bun run dev:backend` - Start Bun server with hot reload
-- `bun run build` - Build for production
-- `bun run lint` - Run ESLint
-- `bun run preview` - Preview production build
+### Web Mercator Projection
+To render GPS data in Three.js, latitude and longitude coordinates are projected into EPSG:3857 (Web Mercator) coordinates using a custom projection module in `mapUtils.ts`. These coordinates are then centered relative to the start point of the GPX track to avoid floating-point jitter/precision issues at high coordinates.
 
-## API Endpoints
+### CPU Elevation Sampling
+Before rendering the 3D track, the track points are processed:
+1. The app parses the GPX XML.
+2. It fetches matching DEM (Digital Elevation Model) tiles at Zoom 14 from AWS Terrarium.
+3. The tiles are decoded on the fly, and `demSampling.ts` samples elevations to snap the GPX points to the exact height of the terrain, guaranteeing that the track follows the terrain profile perfectly.
 
-The boilerplate includes example API endpoints:
+### Quadtree LOD Tiling
+The terrain uses a custom quadtree subdivision algorithm starting from Zoom 10 root tiles around the track bounds:
+- If a tile is close to the camera (distance $< 2.4 \times width$), it is split into 4 child tiles.
+- If it moves far away (distance $> 2.8 \times width$), it is simplified back into its parent.
+- **Hysteresis** prevents rapid, flickering subdivisions.
+- **Cache Eviction Protection** locks siblings in memory until all children are fully loaded, avoiding flashing/rendering holes.
 
-- `GET /api/health` - Health check endpoint
-- `GET /api/version` - Version and runtime information
+---
 
-## Responsive Design
+## 📄 License
 
-The layout is fully responsive with:
-
-- Mobile-first approach using Tailwind CSS
-- Collapsible mobile navigation
-- Responsive grid layouts
-- Touch-friendly interactions
-
-## Dark Mode
-
-Built-in theme switching with three options:
-
-- **Light** - Light theme
-- **Dark** - Dark theme
-- **System** - Follows system preference
-
-The theme preference is persisted across sessions.
-
-## Development Features
-
-- **Hot Module Replacement** - Instant updates during development
-- **CORS Configuration** - Proper CORS setup for API calls
-- **Type Safety** - Full TypeScript coverage
-- **Component Library** - Pre-configured Shadcn/UI components
-- **Routing** - Type-safe routing with React Router
-
-<details>
-<summary><strong>🐳 Docker Deployment</strong></summary>
-
-### Building and Running with Docker
-
-1. **Build the Docker image:**
-
-```bash
-docker build -t gpx-track-flight .
-```
-
-2. **Run the container:**
-
-```bash
-docker run -p 3000:3000 gpx-track-flight
-```
-
-The application will be available at `http://localhost:3000`
-
-### Using Docker Compose
-
-1. **Build and start:**
-
-```bash
-docker-compose up --build
-```
-
-2. **Stop the services:**
-
-```bash
-docker-compose down
-```
-
-### Multi-stage Build Process
-
-The Dockerfile uses a multi-stage build for optimization:
-
-1. **Install stage** - Installs dependencies
-2. **Build stage** - Builds the Vite application
-3. **Release stage** - Creates minimal production image
-
-</details>
-
-<details>
-<summary><strong>🚀 GitHub Container Registry</strong></summary>
-
-### Running from GitHub Container Registry
-
-You can run the pre-built container directly from GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/l3-n0x/vite-bun-react-shadcn-boilerplate:main
-```
-
-**Run the latest version:**
-
-```bash
-docker run -p 3000:3000 ghcr.io/l3-n0x/vite-bun-react-shadcn-boilerplate:main
-```
-
-**Run specific SHA version:**
-
-```bash
-docker run -p 3000:3000 ghcr.io/l3-n0x/vite-bun-react-shadcn-boilerplate:sha256-220cd5898a0cd20a582dd46eb5ef959352495a29e09826f27fa8eb1367188578.sig
-```
-
-### Available Tags
-
-- `main` - Latest version from main branch
-- `sha256-*` - Specific commit SHA versions
-
-The container exposes port 3000 and includes both the built frontend and API server.
-
-</details>
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run the linter: `bun run lint`
-5. Build the project: `bun run build`
-6. Submit a pull request
-
-## License
-
-This project is open source and available under the [MIT License](LICENSE).
+This project is open-source and released under the [MIT License](LICENSE).
