@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react'
+import { ChevronDown, Gauge } from 'lucide-react'
 import type { PreparedTrackData } from '../../lib/trackPreparation'
 import { useDroneFlight } from '../../contexts/DroneFlightContext'
 import {
@@ -71,6 +72,14 @@ export function FlightTelemetryOverlay({
     const { progressRef } = useDroneFlight()
     const gradientId = useId()
     const [currentDistanceM, setCurrentDistanceM] = useState(0)
+    const [isOpen, setIsOpen] = useState(true)
+
+    // Collapse on mobile viewports by default
+    useEffect(() => {
+        if (window.innerWidth < 768) {
+            setIsOpen(false)
+        }
+    }, [])
 
     useEffect(() => {
         let animationFrameId = 0
@@ -181,91 +190,126 @@ export function FlightTelemetryOverlay({
     }, [displayMaxElevationM, displayMinElevationM])
 
     return (
-        <div className="pointer-events-none absolute right-4 bottom-4 z-20 w-[min(88vw,20rem)] overflow-hidden rounded-xl border border-border bg-background/75 px-3 py-2.5 text-foreground shadow-lg backdrop-blur-md">
-            <div className="mb-2.5 flex items-end justify-between gap-3">
-                <div>
-                    <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-                        Current speed
-                    </div>
-                    <div className="mt-1 text-xl font-semibold tabular-nums text-foreground">
-                        {preparedTrack.stats.avgSpeedKmh === null
-                            ? 'N/A'
-                            : `${currentSpeedKmh.toFixed(1)} km/h`}
-                    </div>
-                </div>
-                <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-                        Incline
-                    </div>
-                    <div className="mt-1 text-xl font-semibold tabular-nums text-primary-light">
-                        {formatSignedPercent(currentPoint.inclinePercent)}
-                    </div>
-                </div>
+        <div
+            className={`pointer-events-auto absolute right-4 z-20 border border-border bg-background/75 backdrop-blur-md shadow-lg transition-all duration-300 ease-in-out select-none flex flex-col overflow-hidden ${
+                isOpen
+                    ? 'bottom-14 md:bottom-4 w-[min(88vw,20rem)] h-[184px] p-3 rounded-xl'
+                    : 'bottom-4 w-10 h-10 p-0 rounded-lg items-center justify-center cursor-pointer hover:bg-background/95 hover:text-foreground text-muted-foreground'
+            }`}
+            onClick={!isOpen ? () => setIsOpen(true) : undefined}
+        >
+            {/* Collapsed Content */}
+            <div
+                className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
+                    isOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100 scale-100'
+                }`}
+            >
+                <Gauge size={16} className="text-primary" />
             </div>
 
-            <div className="relative h-26 rounded-lg px-2 py-1.5">
-                <svg
-                    className="absolute inset-0 h-full w-full"
-                    viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                    preserveAspectRatio="none"
-                    aria-label="Local elevation profile"
-                    role="img"
+            {/* Expanded Content */}
+            <div
+                className={`flex flex-col h-full transition-all duration-300 ${
+                    isOpen ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-90'
+                }`}
+            >
+                {/* Clickable Header to Collapse */}
+                <div
+                    className="flex items-center justify-between cursor-pointer select-none pb-1.5 mb-2 border-b border-border/40 text-muted-foreground hover:text-primary transition-colors"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        setIsOpen(false)
+                    }}
                 >
-                    <defs>
-                        <linearGradient
-                            id={gradientId}
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                        >
-                            <stop
-                                offset="0%"
-                                stopColor="var(--primary)"
-                                stopOpacity="0.28"
-                            />
-                            <stop
-                                offset="100%"
-                                stopColor="var(--primary)"
-                                stopOpacity="0"
-                            />
-                        </linearGradient>
-                    </defs>
+                    <span className="text-[9px] uppercase tracking-[0.24em] font-bold">Telemetry & Profile</span>
+                    <ChevronDown size={14} className="shrink-0" />
+                </div>
 
-                    <path
-                        d={buildFillPath(chartPoints)}
-                        fill={`url(#${gradientId})`}
-                    />
-                    <path
-                        d={buildSmoothPath(chartPoints)}
-                        fill="none"
-                        stroke="var(--primary)"
-                        strokeOpacity="0.95"
-                        strokeWidth="2.25"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                    />
-                    <circle
-                        cx={CHART_WIDTH / 2}
-                        cy={markerY}
-                        r="4"
-                        fill="var(--background)"
-                        stroke="var(--primary)"
-                        strokeWidth="1.5"
-                    />
-                    <circle
-                        cx={CHART_WIDTH / 2}
-                        cy={markerY}
-                        r="7.5"
-                        fill="var(--primary)"
-                        fillOpacity="0.12"
-                    />
-                </svg>
+                <div className="mb-2.5 flex items-end justify-between gap-3">
+                    <div>
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                            Current speed
+                        </div>
+                        <div className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+                            {preparedTrack.stats.avgSpeedKmh === null
+                                ? 'N/A'
+                                : `${currentSpeedKmh.toFixed(1)} km/h`}
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                            Incline
+                        </div>
+                        <div className="mt-1 text-xl font-semibold tabular-nums text-primary-light">
+                            {formatSignedPercent(currentPoint.inclinePercent)}
+                        </div>
+                    </div>
+                </div>
 
-                <div className="absolute inset-y-0 right-2 flex flex-col justify-between py-1 text-right text-[10px] font-medium tabular-nums text-muted-foreground">
-                    {elevationLabels.map((label) => (
-                        <span key={label}>{`${label} m`}</span>
-                    ))}
+                <div className="relative h-26 rounded-lg px-2 py-1.5">
+                    <svg
+                        className="absolute inset-0 h-full w-full"
+                        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+                        preserveAspectRatio="none"
+                        aria-label="Local elevation profile"
+                        role="img"
+                    >
+                        <defs>
+                            <linearGradient
+                                id={gradientId}
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                            >
+                                <stop
+                                    offset="0%"
+                                    stopColor="var(--primary)"
+                                    stopOpacity="0.28"
+                                />
+                                <stop
+                                    offset="100%"
+                                    stopColor="var(--primary)"
+                                    stopOpacity="0"
+                                />
+                            </linearGradient>
+                        </defs>
+
+                        <path
+                            d={buildFillPath(chartPoints)}
+                            fill={`url(#${gradientId})`}
+                        />
+                        <path
+                            d={buildSmoothPath(chartPoints)}
+                            fill="none"
+                            stroke="var(--primary)"
+                            strokeOpacity="0.95"
+                            strokeWidth="2.25"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                        <circle
+                            cx={CHART_WIDTH / 2}
+                            cy={markerY}
+                            r="4"
+                            fill="var(--background)"
+                            stroke="var(--primary)"
+                            strokeWidth="1.5"
+                        />
+                        <circle
+                            cx={CHART_WIDTH / 2}
+                            cy={markerY}
+                            r="7.5"
+                            fill="var(--primary)"
+                            fillOpacity="0.12"
+                        />
+                    </svg>
+
+                    <div className="absolute inset-y-0 right-2 flex flex-col justify-between py-1 text-right text-[10px] font-medium tabular-nums text-muted-foreground">
+                        {elevationLabels.map((label) => (
+                            <span key={label}>{`${label} m`}</span>
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>

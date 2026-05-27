@@ -282,7 +282,7 @@ export function DroneFlightControls({
                 ref={containerRef}
                 onMouseDown={handleMouseDown}
                 onTouchStart={handleTouchStart}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 w-96 h-12 flex items-center justify-center opacity-85 hover:opacity-100 transition-opacity duration-300 pointer-events-auto group cursor-pointer"
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-8rem)] md:w-96 h-8 flex items-center justify-center opacity-85 hover:opacity-100 transition-opacity duration-300 pointer-events-auto group cursor-pointer"
             >
                 {/* Track Background */}
                 <div className="w-full bg-background/75 backdrop-blur-md rounded-full h-3 border border-border p-[3px] flex items-center shadow-md">

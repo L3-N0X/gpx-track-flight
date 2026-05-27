@@ -1,5 +1,12 @@
 import { serve, file } from 'bun'
 import { join } from 'path'
+import { PrismaClient } from '@prisma/client'
+import { PrismaBunSqlite } from 'prisma-adapter-bun-sqlite'
+
+const adapter = new PrismaBunSqlite({
+    url: process.env.DATABASE_URL || 'file:./dev.db'
+})
+const prisma = new PrismaClient({ adapter })
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 const port = process.env.PORT || 3030
@@ -67,6 +74,60 @@ const server = serve({
                     }
                     break
 
+                case '/api/share':
+                    if (method === 'POST') {
+                        try {
+                            const { gpxContent } = (await req.json()) as { gpxContent?: string }
+                            if (!gpxContent || typeof gpxContent !== 'string') {
+                                response = Response.json({ error: 'gpxContent must be a string' }, { status: 400 })
+                                break
+                            }
+
+                            // Basic validation: ensure it looks like a GPX file (starts with XML/GPX tag)
+                            const trimmed = gpxContent.trim()
+                            const hasGpxTag = trimmed.includes('<gpx')
+
+                            if (!hasGpxTag) {
+                                response = Response.json({ error: 'Invalid GPX content format' }, { status: 400 })
+                                break
+                            }
+
+                            const shared = await prisma.sharedTrack.create({
+                                data: { gpxContent: trimmed }
+                            })
+
+                            response = Response.json({ id: shared.id })
+                        } catch (err) {
+                            console.error('Error sharing GPX:', err)
+                            response = Response.json({ error: 'Failed to share track' }, { status: 500 })
+                        }
+                    } else if (method === 'GET') {
+                        try {
+                            const id = url.searchParams.get('id')
+                            if (!id) {
+                                response = Response.json({ error: 'Missing track id parameter' }, { status: 400 })
+                                break
+                            }
+
+                            const track = await prisma.sharedTrack.findUnique({
+                                where: { id }
+                            })
+
+                            if (!track) {
+                                response = Response.json({ error: 'Shared track not found' }, { status: 404 })
+                                break
+                            }
+
+                            response = Response.json({ gpxContent: track.gpxContent })
+                        } catch (err) {
+                            console.error('Error fetching GPX:', err)
+                            response = Response.json({ error: 'Failed to retrieve shared track' }, { status: 500 })
+                        }
+                    } else {
+                        response = new Response('Method not allowed', { status: 405 })
+                    }
+                    break
+
                 default:
                     response = Response.json(
                         {
@@ -74,6 +135,7 @@ const server = serve({
                             available_endpoints: [
                                 '/api/health',
                                 '/api/version',
+                                '/api/share',
                             ],
                         },
                         { status: 404 }
