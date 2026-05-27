@@ -18,6 +18,7 @@ COPY . .
 
 # build the Vite project
 ENV NODE_ENV=production
+RUN bunx prisma generate
 RUN bun run build
 
 # copy built static files and server into final image
