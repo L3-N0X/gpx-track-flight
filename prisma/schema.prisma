@@ -1,0 +1,13 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model SharedTrack {
+  id         String   @id @default(uuid())
+  gpxContent String
+  createdAt  DateTime @default(now())
+}

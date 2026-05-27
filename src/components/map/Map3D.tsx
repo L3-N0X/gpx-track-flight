@@ -51,7 +51,7 @@ function ControlsOverlay() {
     const [isOpen, setIsOpen] = useState(false)
 
     return (
-        <div className="absolute top-0 left-0 pointer-events-auto">
+        <div className="hidden md:block absolute top-0 left-0 pointer-events-auto">
             {isOpen ? (
                 <div className="ml-3 mt-3 bg-background/75 backdrop-blur-sm p-4 rounded-md text-sm border border-border">
                     <div

@@ -13,6 +13,7 @@ export function Layout({ children }: LayoutProps) {
                 <MobileNav />
                 <Navbar />
                 <div className="flex items-center gap-2">
+                    <div id="header-share-button-portal" className="flex items-center"></div>
                     <ModeToggle />
                 </div>
             </header>
