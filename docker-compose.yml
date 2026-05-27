@@ -4,3 +4,11 @@ services:
         build: .
         ports:
             - '3000:3000'
+        environment:
+            - PORT=3000
+            - DATABASE_URL=file:/data/dev.db
+        volumes:
+            - gpx_data:/data
+
+volumes:
+    gpx_data:
