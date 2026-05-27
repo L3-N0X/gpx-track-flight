@@ -18,21 +18,22 @@ COPY . .
 
 # build the Vite project
 ENV NODE_ENV=production
+RUN bunx prisma generate
 RUN bun run build
 
 # copy built static files and server into final image
 FROM base AS release
 WORKDIR /usr/src/app
-COPY --from=prerelease /usr/src/app/dist ./dist
-COPY --from=prerelease /usr/src/app/server.ts .
-COPY --from=prerelease /usr/src/app/node_modules ./node_modules
-COPY --from=prerelease /usr/src/app/prisma ./prisma
-COPY --from=prerelease /usr/src/app/prisma.config.ts .
-COPY --from=prerelease /usr/src/app/package.json .
+COPY --chown=bun:bun --from=prerelease /usr/src/app/dist ./dist
+COPY --chown=bun:bun --from=prerelease /usr/src/app/server.ts .
+COPY --chown=bun:bun --from=prerelease /usr/src/app/node_modules ./node_modules
+COPY --chown=bun:bun --from=prerelease /usr/src/app/prisma ./prisma
+COPY --chown=bun:bun --from=prerelease /usr/src/app/prisma.config.ts .
+COPY --chown=bun:bun --from=prerelease /usr/src/app/package.json .
 
 # Set up write permissions for sqlite database in /data
 USER root
-RUN mkdir -p /data && chown -R bun:bun /data && chown -R bun:bun /usr/src/app
+RUN mkdir -p /data && chown -R bun:bun /data
 USER bun
 
 # set production environment and run the full-stack server
