@@ -26,7 +26,10 @@ interface InitialCameraPose {
     target: Vector3
 }
 
-function applyWorldOffset(position: Vector3, worldOrigin: { x: number; y: number }) {
+function applyWorldOffset(
+    position: Vector3,
+    worldOrigin: { x: number; y: number }
+) {
     position.x -= worldOrigin.x
     position.z += worldOrigin.y
 }
@@ -82,8 +85,15 @@ export function DroneCamera({
     worldOrigin: { x: number; y: number }
 }) {
     const { camera, scene } = useThree()
-    const { isPlaying, setIsPlaying, speed, mode, progressRef, curveRef } =
-        useDroneFlight()
+    const {
+        isPlaying,
+        setIsPlaying,
+        speed,
+        mode,
+        progressRef,
+        curveRef,
+        setIsFinished,
+    } = useDroneFlight()
 
     const droneWorldPos = useRef(new Vector3())
     const rawTangent = useRef(new Vector3())
@@ -148,8 +158,7 @@ export function DroneCamera({
             for (let step = 1; step <= CAMERA_COLLISION_STEPS; step++) {
                 const candidatePitch =
                     startPitch +
-                    (maxPitch - startPitch) *
-                        (step / CAMERA_COLLISION_STEPS)
+                    (maxPitch - startPitch) * (step / CAMERA_COLLISION_STEPS)
 
                 setCameraPositionAtPitch(
                     candidateCameraPos.current,
@@ -183,7 +192,8 @@ export function DroneCamera({
                 ? CAMERA_AVOIDANCE_LERP_UP
                 : CAMERA_AVOIDANCE_LERP_DOWN
         const lerpFactor = 1 - Math.pow(1 - lerpBase, delta * 60)
-        const nextPitch = currentPitch + (targetPitch - currentPitch) * lerpFactor
+        const nextPitch =
+            currentPitch + (targetPitch - currentPitch) * lerpFactor
 
         smoothedAvoidancePitch.current =
             Math.abs(nextPitch - startPitch) < 0.001 ? startPitch : nextPitch
@@ -237,28 +247,33 @@ export function DroneCamera({
         }
 
         const t = progressRef.current
-        const progressChangedManually = !isPlaying && Math.abs(t - lastProgressRef.current) > 1e-5
+        const progressChangedManually =
+            !isPlaying && Math.abs(t - lastProgressRef.current) > 1e-5
 
         if (progressChangedManually) {
             isTransitioning.current = false
             smoothedAvoidancePitch.current = null
-            
+
             const curve = curveRef.current
             curve.getPointAt(t, droneWorldPos.current)
             applyWorldOffset(droneWorldPos.current, worldOrigin)
-            
+
             curve.getTangentAt(t, rawTangent.current)
             smoothBehind.current.copy(rawTangent.current).negate().normalize()
-            
-            const camX = droneWorldPos.current.x + smoothBehind.current.x * CAM_BEHIND_METERS
+
+            const camX =
+                droneWorldPos.current.x +
+                smoothBehind.current.x * CAM_BEHIND_METERS
             const camY = droneWorldPos.current.y + CAM_ABOVE_METERS
-            const camZ = droneWorldPos.current.z + smoothBehind.current.z * CAM_BEHIND_METERS
-            
+            const camZ =
+                droneWorldPos.current.z +
+                smoothBehind.current.z * CAM_BEHIND_METERS
+
             transitionTargetPos.current.set(camX, camY, camZ)
             avoidTerrainOcclusion(transitionTargetPos.current, 0.016)
             camera.position.copy(transitionTargetPos.current)
             camera.lookAt(droneWorldPos.current)
-            
+
             lastProgressRef.current = t
             wasPlaying.current = isPlaying
             return
@@ -355,6 +370,7 @@ export function DroneCamera({
         if (progressRef.current >= 1) {
             progressRef.current = 1
             setIsPlaying(false)
+            setIsFinished(true)
         }
 
         const nextT = progressRef.current

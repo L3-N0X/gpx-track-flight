@@ -8,10 +8,13 @@ function getSupportedMimeType(): string {
         'video/mp4',
         'video/webm;codecs=vp9',
         'video/webm;codecs=vp8',
-        'video/webm'
+        'video/webm',
     ]
     for (const type of types) {
-        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
+        if (
+            typeof MediaRecorder !== 'undefined' &&
+            MediaRecorder.isTypeSupported(type)
+        ) {
             return type
         }
     }
@@ -19,7 +22,14 @@ function getSupportedMimeType(): string {
 }
 
 export function FlightRecorder() {
-    const { isRecording, setIsRecording, progressRef, isPlaying, setIsPlaying } = useDroneFlight()
+    const {
+        isRecording,
+        setIsRecording,
+        progressRef,
+        setIsPlaying,
+        isFinished,
+        setIsFinished,
+    } = useDroneFlight()
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const chunksRef = useRef<Blob[]>([])
@@ -36,9 +46,9 @@ export function FlightRecorder() {
                     video: {
                         width: { ideal: 1920 },
                         height: { ideal: 1080 },
-                        frameRate: { ideal: 30 }
+                        frameRate: { ideal: 30 },
                     },
-                    audio: false
+                    audio: false,
                 })
                 activeStream = stream
 
@@ -50,7 +60,7 @@ export function FlightRecorder() {
                 const mimeType = getSupportedMimeType()
                 const recorder = new MediaRecorder(stream, {
                     mimeType,
-                    videoBitsPerSecond: 15000000 // 15 Mbps for ultra-high-definition capture
+                    videoBitsPerSecond: 15000000, // 15 Mbps for ultra-high-definition capture
                 })
                 mediaRecorderRef.current = recorder
 
@@ -62,7 +72,7 @@ export function FlightRecorder() {
 
                 recorder.onstop = () => {
                     // Close all tracks to dismiss the browser's "sharing tab" prompt
-                    stream.getTracks().forEach(track => track.stop())
+                    stream.getTracks().forEach((track) => track.stop())
 
                     const blob = new Blob(chunksRef.current, { type: mimeType })
                     const extension = mimeType.includes('mp4') ? 'mp4' : 'webm'
@@ -81,9 +91,13 @@ export function FlightRecorder() {
 
                 // Auto-start playback from the beginning
                 progressRef.current = 0
+                setIsFinished(false)
                 setIsPlaying(true)
             } catch (err) {
-                console.error('Failed to start screen capture/MediaRecorder:', err)
+                console.error(
+                    'Failed to start screen capture/MediaRecorder:',
+                    err
+                )
                 setIsRecording(false)
             }
         }
@@ -91,7 +105,10 @@ export function FlightRecorder() {
         if (isRecording) {
             startRecording()
         } else {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            if (
+                mediaRecorderRef.current &&
+                mediaRecorderRef.current.state !== 'inactive'
+            ) {
                 mediaRecorderRef.current.stop()
             }
             mediaRecorderRef.current = null
@@ -99,17 +116,30 @@ export function FlightRecorder() {
 
         return () => {
             if (activeStream) {
-                activeStream.getTracks().forEach(track => track.stop())
+                activeStream.getTracks().forEach((track) => track.stop())
             }
         }
-    }, [isRecording, progressRef, setIsPlaying, setIsRecording])
+    }, [isRecording, progressRef, setIsPlaying, setIsRecording, setIsFinished])
 
-    // Auto-stop recording when the flight completes (progress reaches 1)
+    // Auto-stop recording 8 seconds after the flight completes (isFinished becomes true).
+    // The final stats (Max Speed card) takes 1.5 seconds to fully reveal (900ms delay + 600ms transition).
+    // The SVG track path takes 3.0 seconds to finish drawing (500ms delay + 2500ms transition).
+    // A delay of 8 seconds allows the final stats to be shown for 6.5 seconds (and the SVG path for 5.0 seconds) in the final video before it stops.
     useEffect(() => {
-        if (isRecording && !isPlaying && progressRef.current >= 0.999) {
-            setIsRecording(false)
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+        if (isRecording && isFinished) {
+            timeoutId = setTimeout(() => {
+                setIsRecording(false)
+            }, 8000)
         }
-    }, [isPlaying, isRecording, progressRef, setIsRecording])
+
+        return () => {
+            if (timeoutId) {
+                clearTimeout(timeoutId)
+            }
+        }
+    }, [isRecording, isFinished, setIsRecording])
 
     return null
 }

@@ -1,6 +1,6 @@
 # GPX Track Flight 3D Visualizer
 
-A high-performance, premium 3D GPX flight visualizer built with **React**, **Three.js**, and **React Three Fiber (R3F)**, powered by **Vite** and **Bun**. 
+A high-performance, premium 3D GPX flight visualizer built with **React**, **Three.js**, and **React Three Fiber (R3F)**, powered by **Vite** and **Bun**.
 
 This application parses standard GPX files (mountain biking, hiking, road cycling, etc.), maps the track coordinates to 3D space, fetches matching satellite imagery and elevation data, and renders a cinematic, smooth drone-flight simulation following the GPX path.
 
@@ -102,16 +102,21 @@ The resulting assets will be compiled into the `dist/` folder.
 ## ⚙️ How it Works
 
 ### Web Mercator Projection
+
 To render GPS data in Three.js, latitude and longitude coordinates are projected into EPSG:3857 (Web Mercator) coordinates using a custom projection module in `mapUtils.ts`. These coordinates are then centered relative to the start point of the GPX track to avoid floating-point jitter/precision issues at high coordinates.
 
 ### CPU Elevation Sampling
+
 Before rendering the 3D track, the track points are processed:
+
 1. The app parses the GPX XML.
 2. It fetches matching DEM (Digital Elevation Model) tiles at Zoom 14 from AWS Terrarium.
 3. The tiles are decoded on the fly, and `demSampling.ts` samples elevations to snap the GPX points to the exact height of the terrain, guaranteeing that the track follows the terrain profile perfectly.
 
 ### Quadtree LOD Tiling
+
 The terrain uses a custom quadtree subdivision algorithm starting from Zoom 10 root tiles around the track bounds:
+
 - If a tile is close to the camera (distance $< 2.4 \times width$), it is split into 4 child tiles.
 - If it moves far away (distance $> 2.8 \times width$), it is simplified back into its parent.
 - **Hysteresis** prevents rapid, flickering subdivisions.

@@ -9,8 +9,13 @@ interface ShareTrackOverlayProps {
     shareId?: string | null
 }
 
-export function ShareTrackOverlay({ gpxContent, shareId: initialShareId }: ShareTrackOverlayProps) {
-    const [shareId, setShareId] = useState<string | null>(initialShareId || null)
+export function ShareTrackOverlay({
+    gpxContent,
+    shareId: initialShareId,
+}: ShareTrackOverlayProps) {
+    const [shareId, setShareId] = useState<string | null>(
+        initialShareId || null
+    )
     const [isSharing, setIsSharing] = useState(false)
     const [copied, setCopied] = useState(false)
     const [showCard, setShowCard] = useState(false)
@@ -27,7 +32,10 @@ export function ShareTrackOverlay({ gpxContent, shareId: initialShareId }: Share
         if (!showCard) return
 
         const handleClickOutside = (event: MouseEvent) => {
-            if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
+            if (
+                cardRef.current &&
+                !cardRef.current.contains(event.target as Node)
+            ) {
                 setShowCard(false)
             }
         }
@@ -63,14 +71,17 @@ export function ShareTrackOverlay({ gpxContent, shareId: initialShareId }: Share
             setShowCard(true)
 
             // Auto-copy the generated link to clipboard immediately
-            const generatedUrl = `${window.location.origin}/map?share=${data.id}`
+            const generatedUrl = `${window.location.origin}/share/${data.id}`
             try {
                 await navigator.clipboard.writeText(generatedUrl)
                 setCopied(true)
                 toast.success('Track shared & link copied to clipboard!')
                 setTimeout(() => setCopied(false), 2000)
             } catch (copyErr) {
-                console.warn('Auto-copy failed, fallback to show link:', copyErr)
+                console.warn(
+                    'Auto-copy failed, fallback to show link:',
+                    copyErr
+                )
                 toast.success('Track shared successfully!')
             }
         } catch (error) {
@@ -83,9 +94,7 @@ export function ShareTrackOverlay({ gpxContent, shareId: initialShareId }: Share
 
     if (!portalTarget) return null
 
-    const shareUrl = shareId
-        ? `${window.location.origin}/map?share=${shareId}`
-        : ''
+    const shareUrl = shareId ? `${window.location.origin}/share/${shareId}` : ''
 
     const handleCopy = () => {
         if (!shareUrl) return
@@ -112,7 +121,11 @@ export function ShareTrackOverlay({ gpxContent, shareId: initialShareId }: Share
                     <Share2 className="w-4 h-4 text-primary" />
                 )}
                 <span className="hidden sm:inline">
-                    {isSharing ? 'Sharing...' : shareId ? 'Share Link' : 'Share Route'}
+                    {isSharing
+                        ? 'Sharing...'
+                        : shareId
+                          ? 'Share Link'
+                          : 'Share Route'}
                 </span>
             </Button>
 
@@ -121,7 +134,9 @@ export function ShareTrackOverlay({ gpxContent, shareId: initialShareId }: Share
                     <div className="flex items-center justify-between">
                         <span className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-semibold flex items-center gap-1.5">
                             <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            {initialShareId ? 'Viewing Shared Route' : 'Route Shared'}
+                            {initialShareId
+                                ? 'Viewing Shared Route'
+                                : 'Route Shared'}
                         </span>
                     </div>
 

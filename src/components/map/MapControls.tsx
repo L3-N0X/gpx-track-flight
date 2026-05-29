@@ -122,12 +122,19 @@ export function MapControls({
         if (!isPlaying) {
             const terrainGroup = scene.getObjectByName('TileMapGroup')
             if (terrainGroup) {
-                rayOrigin.current.set(camera.position.x, 10000, camera.position.z)
+                rayOrigin.current.set(
+                    camera.position.x,
+                    10000,
+                    camera.position.z
+                )
                 raycaster.current.set(rayOrigin.current, rayDirection.current)
                 raycaster.current.near = 1
                 raycaster.current.far = 20000
 
-                const intersections = raycaster.current.intersectObject(terrainGroup, true)
+                const intersections = raycaster.current.intersectObject(
+                    terrainGroup,
+                    true
+                )
                 const hit = intersections.find((h) => h.object.visible)
                 if (hit) {
                     const terrainHeight = hit.point.y

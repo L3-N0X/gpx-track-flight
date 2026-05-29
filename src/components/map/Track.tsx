@@ -2,12 +2,28 @@ import type { CSSProperties, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { CatmullRomCurve3, Color, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
+import {
+    CatmullRomCurve3,
+    Color,
+    Group,
+    Mesh,
+    MeshStandardMaterial,
+    Vector3,
+} from 'three'
 import { Flag, Mountain, Play, Zap } from 'lucide-react'
 import { useDroneFlight } from '../../contexts/DroneFlightContext'
-import { applySampledTrackHeight, sampleTrackElevations } from '../../lib/demSampling'
-import { buildSegmentedTrackGeometry, getTrackColorForSpeed } from '../../lib/trackGeometry'
-import type { PreparedTrackData, PreparedTrackPoint } from '../../lib/trackPreparation'
+import {
+    applySampledTrackHeight,
+    sampleTrackElevations,
+} from '../../lib/demSampling'
+import {
+    buildSegmentedTrackGeometry,
+    getTrackColorForSpeed,
+} from '../../lib/trackGeometry'
+import type {
+    PreparedTrackData,
+    PreparedTrackPoint,
+} from '../../lib/trackPreparation'
 import { interpolateSmoothedSpeedAtDistance } from '../../lib/trackTelemetry'
 
 interface TrackProps {
@@ -26,7 +42,7 @@ const TRACK_RADIUS = 5
 const TRACK_RADIAL_SEGMENTS = 10
 const TRACK_CLEARANCE_M = 20
 const TRACK_VERTICAL_OFFSET_M = -17
-const HIGHLIGHT_POST_HEIGHT = 0
+// const HIGHLIGHT_POST_HEIGHT = 0
 const HIGHLIGHT_ARM_RISE = 42
 const HIGHLIGHT_ARM_REACH = 48
 const OVERLAP_SPLIT_DISTANCE = 60
@@ -64,10 +80,20 @@ function blendVectors(a: Vector3 | null, b: Vector3 | null) {
     return new Vector3(1, 0, 0)
 }
 
-function buildLateralDirection(points: Vector3[], index: number, fallbackSign = 1) {
+function buildLateralDirection(
+    points: Vector3[],
+    index: number,
+    fallbackSign = 1
+) {
     const current = points[index]
-    const previous = index > 0 ? current.clone().sub(points[Math.max(0, index - 1)]) : null
-    const next = index < points.length - 1 ? points[Math.min(points.length - 1, index + 1)].clone().sub(current) : null
+    const previous =
+        index > 0 ? current.clone().sub(points[Math.max(0, index - 1)]) : null
+    const next =
+        index < points.length - 1
+            ? points[Math.min(points.length - 1, index + 1)]
+                  .clone()
+                  .sub(current)
+            : null
 
     const forward = blendVectors(previous, next)
     forward.y = 0
@@ -87,28 +113,30 @@ function buildArmOffset(direction: Vector3, side = 1, extraSpread = 0) {
         .add(new Vector3(0, HIGHLIGHT_ARM_RISE, 0))
 }
 
-function buildConnectorTransform(start: Vector3, end: Vector3) {
-    const direction = end.clone().sub(start)
-    const length = direction.length()
-    const midpoint = start.clone().addScaledVector(direction, 0.5)
-    const quaternion = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize())
-
-    return { length, midpoint, quaternion }
-}
-
-function TrackHighlight({ title, value, accent, distanceM, totalDistanceM, position, armOffset, icon }: HighlightSpec) {
+function TrackHighlight({
+    title,
+    value,
+    accent,
+    distanceM,
+    totalDistanceM,
+    position,
+    armOffset,
+    icon,
+}: HighlightSpec) {
     const { camera } = useThree()
     const { isPlaying, mode, progressRef, curveRef } = useDroneFlight()
-    const groupRef = useRef<Mesh>(null)
+    const groupRef = useRef<Group>(null)
+    const stalkRef = useRef<Mesh>(null)
     const labelRef = useRef<HTMLDivElement>(null)
-    const armStart = useMemo(() => new Vector3(0, HIGHLIGHT_POST_HEIGHT, 0), [])
-    const armEnd = useMemo(() => new Vector3(armOffset.x, HIGHLIGHT_POST_HEIGHT + armOffset.y, armOffset.z), [armOffset])
-    const connector = useMemo(() => buildConnectorTransform(armStart, armEnd), [armEnd, armStart])
+
+    const floatHeight = armOffset.y // HIGHLIGHT_ARM_RISE = 42
+
     const labelStyle = useMemo(
         () =>
             ({
                 boxShadow: `0 24px 64px rgba(0, 0, 0, 0.32), 0 0 1px rgba(255, 255, 255, 0.1)`,
-                background: 'linear-gradient(165deg, rgba(8, 12, 20, 0.75), rgba(8, 12, 20, 0.55))',
+                background:
+                    'linear-gradient(165deg, rgba(8, 12, 20, 0.75), rgba(8, 12, 20, 0.55))',
             }) as CSSProperties,
         []
     )
@@ -122,23 +150,34 @@ function TrackHighlight({ title, value, accent, distanceM, totalDistanceM, posit
         const distance = camera.position.distanceTo(tempWorldPosition)
         const normalized = Math.min(Math.max((distance - 500) / 3600, 0), 1)
         const scale = 1 - normalized * 0.72
-        const isFlightWindowActive = mode === 'track-speed' && isPlaying && curveRef.current !== null
+        const isFlightWindowActive =
+            mode === 'track-speed' && isPlaying && curveRef.current !== null
         const currentDistanceM = progressRef.current * totalDistanceM
-        const isVisible = !isFlightWindowActive || Math.abs(currentDistanceM - distanceM) <= 2000
+        const isVisible =
+            !isFlightWindowActive ||
+            Math.abs(currentDistanceM - distanceM) <= 2000
 
         labelRef.current.style.display = isVisible ? 'block' : 'none'
+        if (stalkRef.current) {
+            stalkRef.current.visible = isVisible
+        }
         labelRef.current.style.transform = `translate(-50%, calc(-100% - 14px)) scale(${scale})`
     })
 
     return (
-        <group position={position.toArray()}>
-            {/* Connecting Stalk */}
-            <mesh ref={groupRef} position={connector.midpoint.toArray()} quaternion={connector.quaternion}>
-                <cylinderGeometry args={[1.2, 1.2, connector.length, 12]} />
-                <meshStandardMaterial color={accent} transparent opacity={0.6} roughness={0.8} metalness={0.2} />
+        <group ref={groupRef} position={position.toArray()}>
+            {/* Minimal vertical stalk anchor (straight vertical) */}
+            <mesh ref={stalkRef} position={[0, floatHeight / 2, 0]}>
+                <cylinderGeometry args={[1.0, 1.0, floatHeight, 6]} />
+                <meshBasicMaterial color="#ffffff" />
             </mesh>
 
-            <Html transform={false} position={armEnd.toArray()} zIndexRange={[0, 0]} className="pointer-events-none select-none">
+            <Html
+                transform={false}
+                position={[0, floatHeight, 0]}
+                zIndexRange={[0, 0]}
+                className="pointer-events-none select-none"
+            >
                 <div
                     ref={labelRef}
                     className="transition-transform duration-150 ease-out"
@@ -156,7 +195,10 @@ function TrackHighlight({ title, value, accent, distanceM, totalDistanceM, posit
 
                         <div className="flex items-center gap-2.5">
                             {icon && (
-                                <div className="flex items-center justify-center shrink-0" style={{ color: accent }}>
+                                <div
+                                    className="flex items-center justify-center shrink-0"
+                                    style={{ color: accent }}
+                                >
                                     {icon}
                                 </div>
                             )}
@@ -199,14 +241,20 @@ function smoothPath(points: Vector3[]) {
     return smoothed
 }
 
-export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, onSamplingStatusChange }: TrackProps) {
+export function Track({
+    preparedTrack,
+    onReadyChange,
+    onInitialCameraPoseReady,
+    onSamplingStatusChange,
+}: TrackProps) {
     const { curveRef, progressRef } = useDroneFlight()
 
-    const [snappedPoints, setSnappedPoints] = useState<SnappedTrackPoint[]>(() =>
-        preparedTrack.points.map((point) => ({
-            ...point,
-            resolved: false,
-        }))
+    const [snappedPoints, setSnappedPoints] = useState<SnappedTrackPoint[]>(
+        () =>
+            preparedTrack.points.map((point) => ({
+                ...point,
+                resolved: false,
+            }))
     )
     const pointsRef = useRef<SnappedTrackPoint[]>(snappedPoints)
     const initialCameraPoseReportedRef = useRef(false)
@@ -249,7 +297,13 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
             isComplete: false,
             error: null,
         })
-    }, [preparedTrack, onSamplingStatusChange, curveRef, progressRef, prevTrack])
+    }, [
+        preparedTrack,
+        onSamplingStatusChange,
+        curveRef,
+        progressRef,
+        prevTrack,
+    ])
 
     useEffect(() => {
         let cancelled = false
@@ -268,7 +322,11 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
 
                 nextPoints[update.index] = {
                     ...point,
-                    y: applySampledTrackHeight(point, update.height, TRACK_CLEARANCE_M + TRACK_VERTICAL_OFFSET_M),
+                    y: applySampledTrackHeight(
+                        point,
+                        update.height,
+                        TRACK_CLEARANCE_M + TRACK_VERTICAL_OFFSET_M
+                    ),
                     resolved: true,
                 }
             }
@@ -276,7 +334,8 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
             pointsRef.current = nextPoints
             setSnappedPoints(nextPoints)
             onSamplingStatusChange?.({
-                sampledPoints: nextPoints.filter((entry) => entry.resolved).length,
+                sampledPoints: nextPoints.filter((entry) => entry.resolved)
+                    .length,
                 totalPoints: nextPoints.length,
                 isComplete: false,
                 error: null,
@@ -294,12 +353,20 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
                 }
             })
             .catch((error) => {
-                console.error('Failed to sample DEM elevations for track', error)
+                console.error(
+                    'Failed to sample DEM elevations for track',
+                    error
+                )
                 onSamplingStatusChange?.({
-                    sampledPoints: pointsRef.current.filter((entry) => entry.resolved).length,
+                    sampledPoints: pointsRef.current.filter(
+                        (entry) => entry.resolved
+                    ).length,
                     totalPoints: pointsRef.current.length,
                     isComplete: false,
-                    error: error instanceof Error ? error.message : 'Unknown DEM sampling error.',
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : 'Unknown DEM sampling error.',
                 })
             })
 
@@ -309,14 +376,28 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
     }, [onSamplingStatusChange, preparedTrack])
 
     const renderPoints = snappedPoints
-    const cumulativeDistances = useMemo(() => renderPoints.map((point) => point.distanceFromStartM), [renderPoints])
-
-    const smoothedPath = useMemo(
-        () => smoothPath(renderPoints.map((point) => new Vector3(point.x, point.y, point.z))),
+    const cumulativeDistances = useMemo(
+        () => renderPoints.map((point) => point.distanceFromStartM),
         [renderPoints]
     )
 
-    const curve = useMemo(() => (smoothedPath.length >= 2 ? new CatmullRomCurve3(smoothedPath) : null), [smoothedPath])
+    const smoothedPath = useMemo(
+        () =>
+            smoothPath(
+                renderPoints.map(
+                    (point) => new Vector3(point.x, point.y, point.z)
+                )
+            ),
+        [renderPoints]
+    )
+
+    const curve = useMemo(
+        () =>
+            smoothedPath.length >= 2
+                ? new CatmullRomCurve3(smoothedPath)
+                : null,
+        [smoothedPath]
+    )
 
     const geometry = useMemo(
         () =>
@@ -343,7 +424,10 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
     const highlights = useMemo(() => {
         const items: HighlightSpec[] = []
         const highestPoint = smoothedPath[preparedTrack.highestPreparedIndex]
-        const fastestPoint = preparedTrack.fastestPreparedIndex !== null ? smoothedPath[preparedTrack.fastestPreparedIndex] : null
+        const fastestPoint =
+            preparedTrack.fastestPreparedIndex !== null
+                ? smoothedPath[preparedTrack.fastestPreparedIndex]
+                : null
         const startPoint = smoothedPath[0]
         const endPoint = smoothedPath[smoothedPath.length - 1]
 
@@ -352,7 +436,11 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
         }
 
         const startDirection = buildLateralDirection(smoothedPath, 0, 1)
-        const endDirection = buildLateralDirection(smoothedPath, smoothedPath.length - 1, -1)
+        const endDirection = buildLateralDirection(
+            smoothedPath,
+            smoothedPath.length - 1,
+            -1
+        )
         const startEndDistance = startPoint.distanceTo(endPoint)
         const isOverlapping = startEndDistance < OVERLAP_SPLIT_DISTANCE
         const splitSpread = isOverlapping ? HIGHLIGHT_ARM_REACH * 0.45 : 0
@@ -390,10 +478,20 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
                 value: `${preparedTrack.stats.highestElevationM} m`,
                 icon: <Mountain size={14} />,
                 accent: '#f59e0b',
-                distanceM: preparedTrack.points[preparedTrack.highestPreparedIndex]?.distanceFromStartM ?? 0,
+                distanceM:
+                    preparedTrack.points[preparedTrack.highestPreparedIndex]
+                        ?.distanceFromStartM ?? 0,
                 totalDistanceM: preparedTrack.totalDistanceM,
                 position: highestPoint,
-                armOffset: buildArmOffset(buildLateralDirection(smoothedPath, preparedTrack.highestPreparedIndex, 1), 1, 0),
+                armOffset: buildArmOffset(
+                    buildLateralDirection(
+                        smoothedPath,
+                        preparedTrack.highestPreparedIndex,
+                        1
+                    ),
+                    1,
+                    0
+                ),
             })
         }
 
@@ -404,11 +502,18 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
                 value: `${preparedTrack.stats.maxSpeedKmh.toFixed(1)} km/h`,
                 icon: <Zap fill="currentColor" size={14} />,
                 accent: `${getTrackColorForSpeed(preparedTrack.stats.maxSpeedKmh, preparedTrack.stats.maxSpeedKmh).getStyle()}`,
-                distanceM: preparedTrack.points[preparedTrack.fastestPreparedIndex ?? 0]?.distanceFromStartM ?? 0,
+                distanceM:
+                    preparedTrack.points[
+                        preparedTrack.fastestPreparedIndex ?? 0
+                    ]?.distanceFromStartM ?? 0,
                 totalDistanceM: preparedTrack.totalDistanceM,
                 position: fastestPoint,
                 armOffset: buildArmOffset(
-                    buildLateralDirection(smoothedPath, preparedTrack.fastestPreparedIndex ?? 0, -1),
+                    buildLateralDirection(
+                        smoothedPath,
+                        preparedTrack.fastestPreparedIndex ?? 0,
+                        -1
+                    ),
                     -1,
                     0
                 ),
@@ -441,7 +546,14 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
 
         curveRef.current = null
         onReadyChange(false)
-    }, [curve, curveRef, onInitialCameraPoseReady, onReadyChange, samplingComplete, smoothedPath])
+    }, [
+        curve,
+        curveRef,
+        onInitialCameraPoseReady,
+        onReadyChange,
+        samplingComplete,
+        smoothedPath,
+    ])
 
     if (!curve || smoothedPath.length < 2) {
         return null
@@ -452,7 +564,12 @@ export function Track({ preparedTrack, onReadyChange, onInitialCameraPoseReady, 
             <DroneShape preparedTrack={preparedTrack} />
 
             <mesh geometry={geometry}>
-                <meshStandardMaterial color="#ffffff" vertexColors roughness={0.7} metalness={0.1} />
+                <meshStandardMaterial
+                    color="#ffffff"
+                    vertexColors
+                    roughness={0.7}
+                    metalness={0.1}
+                />
             </mesh>
 
             {highlights.map((highlight) => (
@@ -473,14 +590,26 @@ function DroneShape({ preparedTrack }: { preparedTrack: PreparedTrackData }) {
             return
         }
 
-        curveRef.current.getPointAt(progressRef.current, droneRef.current.position)
+        curveRef.current.getPointAt(
+            progressRef.current,
+            droneRef.current.position
+        )
         droneRef.current.position.y += 3
 
         if (materialRef.current) {
-            const currentDistanceM = preparedTrack.totalDistanceM * progressRef.current
-            const currentSpeedKmh = interpolateSmoothedSpeedAtDistance(preparedTrack.points, currentDistanceM)
+            const currentDistanceM =
+                preparedTrack.totalDistanceM * progressRef.current
+            const currentSpeedKmh = interpolateSmoothedSpeedAtDistance(
+                preparedTrack.points,
+                currentDistanceM
+            )
 
-            colorRef.current.copy(getTrackColorForSpeed(currentSpeedKmh, preparedTrack.stats.maxSpeedKmh))
+            colorRef.current.copy(
+                getTrackColorForSpeed(
+                    currentSpeedKmh,
+                    preparedTrack.stats.maxSpeedKmh
+                )
+            )
             materialRef.current.color.copy(colorRef.current)
             materialRef.current.emissive.copy(colorRef.current)
         }

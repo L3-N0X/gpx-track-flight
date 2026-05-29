@@ -19,11 +19,15 @@ export function findLookAheadPoint(
     }
 
     const first = points[0]
-    const startPoint = 'x' in first ? new Vector3(first.x, first.y, first.z) : (first as Vector3)
+    const startPoint =
+        'x' in first
+            ? new Vector3(first.x, first.y, first.z)
+            : (first as Vector3)
 
     for (let i = 1; i < points.length; i++) {
         const p = points[i]
-        const currentPoint = 'x' in p ? new Vector3(p.x, p.y, p.z) : (p as Vector3)
+        const currentPoint =
+            'x' in p ? new Vector3(p.x, p.y, p.z) : (p as Vector3)
         if (currentPoint.distanceTo(startPoint) >= minimumDistanceM) {
             return currentPoint
         }
@@ -42,14 +46,19 @@ export function computeCameraPose(
     }
 
     const first = points[0]
-    const startPoint = 'x' in first ? new Vector3(first.x, first.y, first.z) : (first as Vector3)
-    
+    const startPoint =
+        'x' in first
+            ? new Vector3(first.x, first.y, first.z)
+            : (first as Vector3)
+
     const trackOffset = new Vector3(-worldOrigin.x, 0, worldOrigin.y)
     const startWorld = startPoint.clone().add(trackOffset)
-    
-    const aheadPoint = findLookAheadPoint(points, INITIAL_CAMERA_LOOKAHEAD_METERS) ?? startPoint
+
+    const aheadPoint =
+        findLookAheadPoint(points, INITIAL_CAMERA_LOOKAHEAD_METERS) ??
+        startPoint
     const aheadWorld = aheadPoint.clone().add(trackOffset)
-    
+
     const forward = aheadWorld.clone().sub(startWorld)
 
     if (forward.lengthSq() < 1e-6) {

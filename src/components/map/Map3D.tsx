@@ -22,8 +22,7 @@ import { Track } from './Track'
 import { LocationLabels } from './LocationLabels'
 import { computeCameraPose, type CameraPose } from '../../lib/cameraUtils'
 import { FlightRecorder } from './FlightRecorder'
-
-
+import { FlightFinishedOverlay } from './FlightFinishedOverlay'
 
 function CameraSetup({
     initialCameraPose,
@@ -196,20 +195,20 @@ function DebugProbe({
                 const nodeLevels: Record<number, number> = {}
                 const classNames = new Set<string>()
 
-                tileMapGroup.traverse((child) => {
+                tileMapGroup.traverse((child: any) => {
                     classNames.add(child.constructor.name)
-                    
+
                     // Robust check for geo-three nodes
-                    // @ts-expect-error level property
-                    const isNode = child.level !== undefined || child.isMapNode || child.constructor.name.includes('Node')
-                    
+                    const isNode =
+                        child.level !== undefined ||
+                        child.isMapNode ||
+                        child.constructor.name.includes('Node')
+
                     if (isNode) {
                         mapNodes++
-                        // @ts-expect-error level property
                         const lvl = child.level || 0
                         nodeLevels[lvl] = (nodeLevels[lvl] || 0) + 1
                     }
-                    // @ts-expect-error three Mesh detection
                     if (child.isMesh) {
                         mapMeshes++
                     }
@@ -240,7 +239,15 @@ function DebugProbe({
     return null
 }
 
-export function Map3D({ gpxContent }: { gpxContent?: string }) {
+function Map3DInner({
+    gpxContent,
+    shareId,
+}: {
+    gpxContent?: string
+    shareId?: string | null
+}) {
+    const { isFinished, setIsFinished, setIsPlaying, progressRef } =
+        useDroneFlight()
     const preparedTrack = useMemo(() => {
         if (!gpxContent) {
             return null
@@ -274,7 +281,6 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
     const [samplingStatus, setSamplingStatus] =
         useState<TrackSamplingStatus | null>(null)
 
-
     const [prevTrack, setPrevTrack] = useState(preparedTrack)
 
     if (preparedTrack !== prevTrack) {
@@ -282,6 +288,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
         setTerrainReady(false)
         setTrackReady(false)
         setSamplingStatus(null)
+        setIsFinished(false)
 
         // Compute rough initial camera pose immediately from unprepared points
         if (preparedTrack) {
@@ -323,8 +330,10 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
     const handleWarmupChange = useMemo(() => setTerrainReady, [])
 
     return (
-        <DroneFlightProvider>
-            <div className="absolute inset-0 bg-slate-900 overflow-hidden">
+        <div className="absolute inset-0 bg-slate-900 overflow-hidden">
+            <div
+                className={`w-full h-full transition-all duration-1000 ${isFinished ? 'blur-md scale-105 pointer-events-none' : ''}`}
+            >
                 <Canvas
                     camera={{
                         position: initialCanvasPosition,
@@ -338,7 +347,6 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                         applyToken={cameraApplyToken}
                     />
                     <FlightRecorder />
-
 
                     <ambientLight intensity={0.5} />
                     <directionalLight
@@ -355,11 +363,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                                 worldOrigin={worldOrigin}
                             />
                             <group
-                                position={[
-                                    -worldOrigin.x,
-                                    0,
-                                    worldOrigin.y,
-                                ]}
+                                position={[-worldOrigin.x, 0, worldOrigin.y]}
                             >
                                 <Track
                                     preparedTrack={preparedTrack}
@@ -378,9 +382,7 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                                     }}
                                     onSamplingStatusChange={setSamplingStatus}
                                 />
-                                <LocationLabels
-                                    preparedTrack={preparedTrack}
-                                />
+                                <LocationLabels preparedTrack={preparedTrack} />
                             </group>
                         </>
                     )}
@@ -393,17 +395,17 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                     />
                     <DebugProbe onMetricsChange={setDebugMetrics} />
                 </Canvas>
+            </div>
 
-                {preparedTrack && (
-                    <>
-                        <GpxStatsOverlay stats={preparedTrack.stats} />
-                        {preparedTrack.points.length > 0 && (
-                            <FlightTelemetryOverlay
-                                preparedTrack={preparedTrack}
-                            />
-                        )}
-                    </>
-                )}
+            {!isFinished && preparedTrack && (
+                <>
+                    <GpxStatsOverlay stats={preparedTrack.stats} />
+                    {preparedTrack.points.length > 0 && (
+                        <FlightTelemetryOverlay preparedTrack={preparedTrack} />
+                    )}
+                </>
+            )}
+            {!isFinished && (
                 <MapDebugOverlay
                     isOpen={isDebugOpen}
                     metrics={debugMetrics}
@@ -411,7 +413,9 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                     trackReady={trackReady}
                     samplingStatus={samplingStatus}
                 />
-                <ControlsOverlay />
+            )}
+            {!isFinished && <ControlsOverlay />}
+            {!isFinished && (
                 <DroneFlightControls
                     canPlay={trackReady}
                     canReset={initialCameraPose !== null}
@@ -421,7 +425,38 @@ export function Map3D({ gpxContent }: { gpxContent?: string }) {
                         }
                     }}
                 />
-            </div>
+            )}
+
+            {isFinished && preparedTrack && (
+                <FlightFinishedOverlay
+                    points={preparedTrack.points}
+                    stats={preparedTrack.stats}
+                    gpxContent={gpxContent || ''}
+                    shareId={shareId}
+                    onRestart={() => {
+                        progressRef.current = 0
+                        setIsFinished(false)
+                        setIsPlaying(true)
+                        if (initialCameraPose) {
+                            setCameraApplyToken((current) => current + 1)
+                        }
+                    }}
+                />
+            )}
+        </div>
+    )
+}
+
+export function Map3D({
+    gpxContent,
+    shareId,
+}: {
+    gpxContent?: string
+    shareId?: string | null
+}) {
+    return (
+        <DroneFlightProvider>
+            <Map3DInner gpxContent={gpxContent} shareId={shareId} />
         </DroneFlightProvider>
     )
 }

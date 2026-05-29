@@ -2,6 +2,7 @@ import { type FC } from 'react'
 import { HomePage } from './pages/home.tsx'
 import { AboutPage } from './pages/about.tsx'
 import { MapPage } from './pages/map.tsx'
+import { SharePage } from './pages/share.tsx'
 
 export interface AppRoute {
     path: string
@@ -36,6 +37,14 @@ export const routes: AppRoute[] = [
         component: MapPage,
         showInNavbar: true,
         category: 'main',
+    },
+    {
+        path: '/share/:shareId?',
+        title: 'Shared Route',
+        description: 'View details of a shared mountain biking track.',
+        component: SharePage,
+        showInNavbar: false,
+        category: 'other',
     },
 ]
 
