@@ -201,7 +201,9 @@ export function FlightTelemetryOverlay({
             {/* Collapsed Content */}
             <div
                 className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
-                    isOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100 scale-100'
+                    isOpen
+                        ? 'opacity-0 pointer-events-none scale-75'
+                        : 'opacity-100 scale-100'
                 }`}
             >
                 <Gauge size={16} className="text-primary" />
@@ -210,7 +212,9 @@ export function FlightTelemetryOverlay({
             {/* Expanded Content */}
             <div
                 className={`flex flex-col h-full transition-all duration-300 ${
-                    isOpen ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-90'
+                    isOpen
+                        ? 'opacity-100 scale-100'
+                        : 'opacity-0 pointer-events-none scale-90'
                 }`}
             >
                 {/* Clickable Header to Collapse */}
@@ -221,7 +225,9 @@ export function FlightTelemetryOverlay({
                         setIsOpen(false)
                     }}
                 >
-                    <span className="text-[9px] uppercase tracking-[0.24em] font-bold">Telemetry & Profile</span>
+                    <span className="text-[9px] uppercase tracking-[0.24em] font-bold">
+                        Telemetry & Profile
+                    </span>
                     <ChevronDown size={14} className="shrink-0" />
                 </div>
 

@@ -46,7 +46,11 @@ export function createTileKey(zoom: number, x: number, y: number): string {
     return `${zoom}/${x}/${y}`
 }
 
-export function mercatorToTile(zoom: number, mercatorX: number, mercatorY: number) {
+export function mercatorToTile(
+    zoom: number,
+    mercatorX: number,
+    mercatorY: number
+) {
     const worldSize = MAX_MERCATOR * 2
     const tilesPerAxis = Math.pow(2, zoom)
     const normalizedX = (mercatorX + MAX_MERCATOR) / worldSize
@@ -79,7 +83,14 @@ function addTileRect(
 function buildTileRectSet(bounds: TileBounds, zoom: number) {
     const tileKeys = new Set<string>()
 
-    addTileRect(tileKeys, zoom, bounds.minX, bounds.maxX, bounds.minY, bounds.maxY)
+    addTileRect(
+        tileKeys,
+        zoom,
+        bounds.minX,
+        bounds.maxX,
+        bounds.minY,
+        bounds.maxY
+    )
 
     return tileKeys
 }
@@ -94,10 +105,14 @@ function buildTileSet(preparedTrack: PreparedTrackData, zoom: number) {
         addTileRect(
             tileKeys,
             zoom,
-            Math.min(current.mercatorX, next.mercatorX) - TRACK_CORRIDOR_PADDING_M,
-            Math.max(current.mercatorX, next.mercatorX) + TRACK_CORRIDOR_PADDING_M,
-            Math.min(current.mercatorY, next.mercatorY) - TRACK_CORRIDOR_PADDING_M,
-            Math.max(current.mercatorY, next.mercatorY) + TRACK_CORRIDOR_PADDING_M
+            Math.min(current.mercatorX, next.mercatorX) -
+                TRACK_CORRIDOR_PADDING_M,
+            Math.max(current.mercatorX, next.mercatorX) +
+                TRACK_CORRIDOR_PADDING_M,
+            Math.min(current.mercatorY, next.mercatorY) -
+                TRACK_CORRIDOR_PADDING_M,
+            Math.max(current.mercatorY, next.mercatorY) +
+                TRACK_CORRIDOR_PADDING_M
         )
     }
 
@@ -113,14 +128,31 @@ function buildTileSet(preparedTrack: PreparedTrackData, zoom: number) {
     return tileKeys
 }
 
-export function buildLocalTerrainBounds(preparedTrack: PreparedTrackData): TileBounds {
-    const width = Math.max(0, preparedTrack.mercatorBounds.maxX - preparedTrack.mercatorBounds.minX)
-    const height = Math.max(0, preparedTrack.mercatorBounds.maxY - preparedTrack.mercatorBounds.minY)
+export function buildLocalTerrainBounds(
+    preparedTrack: PreparedTrackData
+): TileBounds {
+    const width = Math.max(
+        0,
+        preparedTrack.mercatorBounds.maxX - preparedTrack.mercatorBounds.minX
+    )
+    const height = Math.max(
+        0,
+        preparedTrack.mercatorBounds.maxY - preparedTrack.mercatorBounds.minY
+    )
     const trackSpan = Math.max(width, height)
-    const sideLength = Math.min(LOCAL_WINDOW_MAX_SIZE_M, Math.max(LOCAL_WINDOW_MIN_SIZE_M, trackSpan * LOCAL_WINDOW_SCALE))
+    const sideLength = Math.min(
+        LOCAL_WINDOW_MAX_SIZE_M,
+        Math.max(LOCAL_WINDOW_MIN_SIZE_M, trackSpan * LOCAL_WINDOW_SCALE)
+    )
 
-    const centerX = (preparedTrack.mercatorBounds.minX + preparedTrack.mercatorBounds.maxX) / 2
-    const centerY = (preparedTrack.mercatorBounds.minY + preparedTrack.mercatorBounds.maxY) / 2
+    const centerX =
+        (preparedTrack.mercatorBounds.minX +
+            preparedTrack.mercatorBounds.maxX) /
+        2
+    const centerY =
+        (preparedTrack.mercatorBounds.minY +
+            preparedTrack.mercatorBounds.maxY) /
+        2
     const halfSide = sideLength / 2
 
     return {
@@ -131,14 +163,19 @@ export function buildLocalTerrainBounds(preparedTrack: PreparedTrackData): TileB
     }
 }
 
-export function buildLocalRenderPlan(preparedTrack: PreparedTrackData): LocalRenderPlan {
+export function buildLocalRenderPlan(
+    preparedTrack: PreparedTrackData
+): LocalRenderPlan {
     const bounds = buildLocalTerrainBounds(preparedTrack)
     const tileKeys = buildTileRectSet(bounds, TERRAIN_BOUNDARY_ZOOM)
     let rootZoom = TERRAIN_BOUNDARY_ZOOM
     let topLeft = mercatorToTile(rootZoom, bounds.minX, bounds.maxY)
     let bottomRight = mercatorToTile(rootZoom, bounds.maxX, bounds.minY)
 
-    while ((topLeft.x !== bottomRight.x || topLeft.y !== bottomRight.y) && rootZoom > 0) {
+    while (
+        (topLeft.x !== bottomRight.x || topLeft.y !== bottomRight.y) &&
+        rootZoom > 0
+    ) {
         rootZoom--
         topLeft = mercatorToTile(rootZoom, bounds.minX, bounds.maxY)
         bottomRight = mercatorToTile(rootZoom, bounds.maxX, bounds.minY)
@@ -159,7 +196,10 @@ export function buildWarmupPlan(preparedTrack: PreparedTrackData): WarmupPlan {
     let targetZoom = TERRAIN_OPERATIONAL_ZOOM
     let tileKeys = buildTileSet(preparedTrack, targetZoom)
 
-    while (tileKeys.size > MAX_WARM_TILES && targetZoom > MIN_OPERATIONAL_ZOOM) {
+    while (
+        tileKeys.size > MAX_WARM_TILES &&
+        targetZoom > MIN_OPERATIONAL_ZOOM
+    ) {
         targetZoom--
         tileKeys = buildTileSet(preparedTrack, targetZoom)
     }

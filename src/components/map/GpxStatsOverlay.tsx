@@ -54,7 +54,9 @@ export function GpxStatsOverlay({ stats }: { stats: GpxStats }) {
             {/* Collapsed Button Content */}
             <div
                 className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
-                    isOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100 scale-100'
+                    isOpen
+                        ? 'opacity-0 pointer-events-none scale-75'
+                        : 'opacity-100 scale-100'
                 }`}
             >
                 <Route size={16} className="text-primary" />
@@ -63,7 +65,9 @@ export function GpxStatsOverlay({ stats }: { stats: GpxStats }) {
             {/* Expanded Card Content */}
             <div
                 className={`flex flex-col h-full transition-all duration-300 ${
-                    isOpen ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-90'
+                    isOpen
+                        ? 'opacity-100 scale-100'
+                        : 'opacity-0 pointer-events-none scale-90'
                 }`}
             >
                 {/* Clickable Header to Collapse */}
@@ -80,7 +84,10 @@ export function GpxStatsOverlay({ stats }: { stats: GpxStats }) {
                     >
                         {stats.trackName || 'Route Details'}
                     </p>
-                    <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                    <ChevronDown
+                        size={14}
+                        className="text-muted-foreground shrink-0"
+                    />
                 </div>
 
                 <div className="space-y-2 mt-0.5">
@@ -102,7 +109,8 @@ export function GpxStatsOverlay({ stats }: { stats: GpxStats }) {
                         value={`+${stats.elevationGainM} m`}
                     />
 
-                    {(stats.maxSpeedKmh !== null || stats.avgSpeedKmh !== null) && (
+                    {(stats.maxSpeedKmh !== null ||
+                        stats.avgSpeedKmh !== null) && (
                         <>
                             <StatRow
                                 icon={<Gauge size={13} />}

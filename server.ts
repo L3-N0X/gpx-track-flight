@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaBunSqlite } from 'prisma-adapter-bun-sqlite'
 
 const adapter = new PrismaBunSqlite({
-    url: process.env.DATABASE_URL || 'file:./dev.db'
+    url: process.env.DATABASE_URL || 'file:./dev.db',
 })
 const prisma = new PrismaClient({ adapter })
 
@@ -77,9 +77,14 @@ const server = serve({
                 case '/api/share':
                     if (method === 'POST') {
                         try {
-                            const { gpxContent } = (await req.json()) as { gpxContent?: string }
+                            const { gpxContent } = (await req.json()) as {
+                                gpxContent?: string
+                            }
                             if (!gpxContent || typeof gpxContent !== 'string') {
-                                response = Response.json({ error: 'gpxContent must be a string' }, { status: 400 })
+                                response = Response.json(
+                                    { error: 'gpxContent must be a string' },
+                                    { status: 400 }
+                                )
                                 break
                             }
 
@@ -88,43 +93,71 @@ const server = serve({
                             const hasGpxTag = trimmed.includes('<gpx')
 
                             if (!hasGpxTag) {
-                                response = Response.json({ error: 'Invalid GPX content format' }, { status: 400 })
+                                response = Response.json(
+                                    { error: 'Invalid GPX content format' },
+                                    { status: 400 }
+                                )
                                 break
                             }
 
-                            const shared = await prisma.sharedTrack.create({
-                                data: { gpxContent: trimmed }
-                            })
+                            const existing = await prisma.sharedTrack.findFirst(
+                                {
+                                    where: { gpxContent: trimmed },
+                                }
+                            )
 
-                            response = Response.json({ id: shared.id })
+                            if (existing) {
+                                response = Response.json({ id: existing.id })
+                            } else {
+                                const shared = await prisma.sharedTrack.create({
+                                    data: { gpxContent: trimmed },
+                                })
+                                response = Response.json({ id: shared.id })
+                            }
                         } catch (err) {
                             console.error('Error sharing GPX:', err)
-                            response = Response.json({ error: 'Failed to share track' }, { status: 500 })
+                            response = Response.json(
+                                { error: 'Failed to share track' },
+                                { status: 500 }
+                            )
                         }
                     } else if (method === 'GET') {
                         try {
                             const id = url.searchParams.get('id')
                             if (!id) {
-                                response = Response.json({ error: 'Missing track id parameter' }, { status: 400 })
+                                response = Response.json(
+                                    { error: 'Missing track id parameter' },
+                                    { status: 400 }
+                                )
                                 break
                             }
 
                             const track = await prisma.sharedTrack.findUnique({
-                                where: { id }
+                                where: { id },
                             })
 
                             if (!track) {
-                                response = Response.json({ error: 'Shared track not found' }, { status: 404 })
+                                response = Response.json(
+                                    { error: 'Shared track not found' },
+                                    { status: 404 }
+                                )
                                 break
                             }
 
-                            response = Response.json({ gpxContent: track.gpxContent })
+                            response = Response.json({
+                                gpxContent: track.gpxContent,
+                            })
                         } catch (err) {
                             console.error('Error fetching GPX:', err)
-                            response = Response.json({ error: 'Failed to retrieve shared track' }, { status: 500 })
+                            response = Response.json(
+                                { error: 'Failed to retrieve shared track' },
+                                { status: 500 }
+                            )
                         }
                     } else {
-                        response = new Response('Method not allowed', { status: 405 })
+                        response = new Response('Method not allowed', {
+                            status: 405,
+                        })
                     }
                     break
 

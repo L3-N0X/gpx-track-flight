@@ -15,13 +15,23 @@ interface PlaceNode {
     name: string
     lat: number
     lon: number
-    type: 'city' | 'town' | 'village' | 'hamlet' | 'peak' | 'saddle' | 'viewpoint'
+    type:
+        | 'city'
+        | 'town'
+        | 'village'
+        | 'hamlet'
+        | 'peak'
+        | 'saddle'
+        | 'viewpoint'
+        | 'lake'
     x: number
     z: number
     elevation: number
     resolvedElevation: boolean
     distanceToTrack: number
     osmElevation?: number
+    osmType?: 'node' | 'way' | 'relation'
+    hasWikidata?: boolean
 }
 
 // Memory cache to avoid querying OSM multiple times for the same track
@@ -46,9 +56,7 @@ function haversineDistanceM(
     return R * c
 }
 
-export function LocationLabels({
-    preparedTrack,
-}: LocationLabelsProps) {
+export function LocationLabels({ preparedTrack }: LocationLabelsProps) {
     const [places, setPlaces] = useState<PlaceNode[]>([])
 
     // Compute bounding box and cache key
@@ -61,12 +69,19 @@ export function LocationLabels({
         const points = preparedTrack.points
 
         if (points.length === 0) {
-            console.log('[LocationLabels] preparedTrack has 0 points, skipping fetch')
+            console.log(
+                '[LocationLabels] preparedTrack has 0 points, skipping fetch'
+            )
             setPlaces([])
             return
         }
 
-        console.log('[LocationLabels] Initializing for track:', preparedTrack.name, 'with key:', cacheKey)
+        console.log(
+            '[LocationLabels] Initializing for track:',
+            preparedTrack.name,
+            'with key:',
+            cacheKey
+        )
 
         // Check cache first
         if (overpassCache.has(cacheKey)) {
@@ -75,7 +90,9 @@ export function LocationLabels({
             setPlaces(cached)
             // If they are not fully elevation resolved, trigger elevation sampling
             if (cached.some((p) => !p.resolvedElevation)) {
-                console.log('[LocationLabels] Triggering elevation sampling for cached places...')
+                console.log(
+                    '[LocationLabels] Triggering elevation sampling for cached places...'
+                )
                 void resolveElevations(cached, isCancelled)
             }
             return
@@ -96,7 +113,12 @@ export function LocationLabels({
                     if (p.lon > maxLon) maxLon = p.lon
                 }
 
-                console.log('[LocationLabels] Track lat/lon bounds:', { minLat, maxLat, minLon, maxLon })
+                console.log('[LocationLabels] Track lat/lon bounds:', {
+                    minLat,
+                    maxLat,
+                    minLon,
+                    maxLon,
+                })
 
                 // Expand bbox by 0.12 degrees (approx 13km) to find places/peaks in region
                 const margin = 0.12
@@ -105,18 +127,30 @@ export function LocationLabels({
                 const N = maxLat + margin
                 const E = maxLon + margin
 
-                console.log('[LocationLabels] Expanded query bbox:', { S, W, N, E })
+                console.log('[LocationLabels] Expanded query bbox:', {
+                    S,
+                    W,
+                    N,
+                    E,
+                })
 
-                // Query Overpass API for place nodes and highlight features (peaks, saddles, viewpoints)
+                // Query Overpass API for place nodes, highlight features (peaks, saddles, viewpoints), and named water bodies (lakes, reservoirs)
                 const query = `[out:json][timeout:15];(
                     node["place"~"city|town|village|hamlet"](${S},${W},${N},${E});
                     node["natural"="peak"](${S},${W},${N},${E});
                     node["natural"="saddle"](${S},${W},${N},${E});
                     node["tourism"="viewpoint"](${S},${W},${N},${E});
-                );out body;`
+                    way["natural"="water"]["name"](${S},${W},${N},${E});
+                    relation["natural"="water"]["name"](${S},${W},${N},${E});
+                    way["landuse"="reservoir"]["name"](${S},${W},${N},${E});
+                    relation["landuse"="reservoir"]["name"](${S},${W},${N},${E});
+                );out center;`
                 const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
 
-                console.log('[LocationLabels] Fetching from Overpass API url:', url)
+                console.log(
+                    '[LocationLabels] Fetching from Overpass API url:',
+                    url
+                )
                 const res = await fetch(url)
                 if (!res.ok) {
                     throw new Error(
@@ -126,7 +160,9 @@ export function LocationLabels({
 
                 const data = await res.json()
                 const elements = data.elements || []
-                console.log(`[LocationLabels] OSM returned ${elements.length} raw place nodes.`)
+                console.log(
+                    `[LocationLabels] OSM returned ${elements.length} raw place nodes.`
+                )
 
                 // Map and filter elements
                 const mapped: PlaceNode[] = []
@@ -134,12 +170,16 @@ export function LocationLabels({
                 for (const elem of elements) {
                     if (!elem.tags?.name) continue
 
+                    const lat = elem.lat ?? elem.center?.lat
+                    const lon = elem.lon ?? elem.center?.lon
+                    if (lat === undefined || lon === undefined) continue
+
                     // Calculate distance to nearest point on the track
                     let minDistance = Number.POSITIVE_INFINITY
                     for (const pt of points) {
                         const d = haversineDistanceM(
-                            elem.lat,
-                            elem.lon,
+                            lat,
+                            lon,
                             pt.lat,
                             pt.lon
                         )
@@ -155,11 +195,17 @@ export function LocationLabels({
                         | 'peak'
                         | 'saddle'
                         | 'viewpoint'
+                        | 'lake'
                         | null = null
 
                     if (elem.tags.place) {
                         const p = elem.tags.place
-                        if (p === 'city' || p === 'town' || p === 'village' || p === 'hamlet') {
+                        if (
+                            p === 'city' ||
+                            p === 'town' ||
+                            p === 'village' ||
+                            p === 'hamlet'
+                        ) {
                             type = p
                         }
                     } else if (elem.tags.natural === 'peak') {
@@ -168,6 +214,16 @@ export function LocationLabels({
                         type = 'saddle'
                     } else if (elem.tags.tourism === 'viewpoint') {
                         type = 'viewpoint'
+                    } else if (
+                        elem.tags.natural === 'water' ||
+                        elem.tags.landuse === 'reservoir'
+                    ) {
+                        // Filter out specific non-lake water bodies if they are tagged as such
+                        const waterType = elem.tags.water
+                        const excludeTypes = ['river', 'stream', 'canal', 'ditch', 'drain', 'pool', 'wastewater', 'pond']
+                        if (!waterType || !excludeTypes.includes(waterType)) {
+                            type = 'lake'
+                        }
                     }
 
                     if (!type) continue
@@ -175,54 +231,76 @@ export function LocationLabels({
                     // Rejection filters based on type, height, and track distance
                     let keep = false
                     if (type === 'city' && minDistance <= 60000) keep = true
-                    else if (type === 'town' && minDistance <= 35000) keep = true
-                    else if (type === 'village' && minDistance <= 25000) keep = true
-                    else if (type === 'hamlet' && minDistance <= 12000) keep = true
+                    else if (type === 'town' && minDistance <= 35000)
+                        keep = true
+                    else if (type === 'village' && minDistance <= 25000)
+                        keep = true
+                    else if (type === 'hamlet' && minDistance <= 12000)
+                        keep = true
                     else if (type === 'peak') {
                         // Parse elevation first to decide filter range
-                        let tempElevation = points[0]?.smoothedElevationM ?? 1000
+                        let tempElevation =
+                            points[0]?.smoothedElevationM ?? 1000
                         if (elem.tags.ele) {
-                            const parsed = parseFloat(elem.tags.ele.replace(/[^0-9.-]/g, ''))
+                            const parsed = parseFloat(
+                                elem.tags.ele.replace(/[^0-9.-]/g, '')
+                            )
                             if (!isNaN(parsed)) tempElevation = parsed
                         }
                         // Reject tiny hills entirely (under 400m elevation) to avoid minor peak clutter
                         if (tempElevation >= 400) {
-                            if (tempElevation > 2000 && minDistance <= 35000) keep = true
-                            else if (tempElevation > 1000 && minDistance <= 20000) keep = true
-                            else if (tempElevation > 600 && minDistance <= 10000) keep = true
+                            if (tempElevation > 2000 && minDistance <= 35000)
+                                keep = true
+                            else if (
+                                tempElevation > 1000 &&
+                                minDistance <= 20000
+                            )
+                                keep = true
+                            else if (
+                                tempElevation > 600 &&
+                                minDistance <= 10000
+                            )
+                                keep = true
                             else if (minDistance <= 5000) keep = true // low peaks must be very close to the track
                         }
+                    } else if (type === 'saddle' && minDistance <= 12000)
+                        keep = true
+                    else if (type === 'viewpoint' && minDistance <= 10000)
+                        keep = true
+                    else if (type === 'lake') {
+                        // Major lakes (relations or wikidata-tagged) are visible from further away
+                        const isMajor = elem.type === 'relation' || !!elem.tags.wikidata || !!elem.tags.wikipedia
+                        if (isMajor && minDistance <= 30000) keep = true
+                        else if (minDistance <= 10000) keep = true
                     }
-                    else if (type === 'saddle' && minDistance <= 12000) keep = true
-                    else if (type === 'viewpoint' && minDistance <= 10000) keep = true
 
                     if (!keep) continue
 
                     // Project coordinates to Web Mercator
-                    const mercator = datumsToSpherical(
-                        elem.lat,
-                        elem.lon
-                    )
+                    const mercator = datumsToSpherical(lat, lon)
                     const x = mercator.x
                     const z = -mercator.y
 
                     // Parse elevation tag if present in OSM tags (common for peaks/saddles)
                     let osmElevation: number | undefined = undefined
                     if (elem.tags.ele) {
-                        const parsed = parseFloat(elem.tags.ele.replace(/[^0-9.-]/g, ''))
+                        const parsed = parseFloat(
+                            elem.tags.ele.replace(/[^0-9.-]/g, '')
+                        )
                         if (!isNaN(parsed)) {
                             osmElevation = parsed
                         }
                     }
 
                     // Prefer OSM elevation if available to avoid ground clipping and DEM inaccuracies for peaks/saddles
-                    const initialElevation = osmElevation ?? points[0]?.smoothedElevationM ?? 1000
+                    const initialElevation =
+                        osmElevation ?? points[0]?.smoothedElevationM ?? 1000
 
                     mapped.push({
                         id: elem.id,
                         name: elem.tags.name,
-                        lat: elem.lat,
-                        lon: elem.lon,
+                        lat: lat,
+                        lon: lon,
                         type,
                         x,
                         z,
@@ -230,10 +308,14 @@ export function LocationLabels({
                         resolvedElevation: osmElevation !== undefined,
                         distanceToTrack: minDistance,
                         osmElevation,
+                        osmType: elem.type,
+                        hasWikidata: !!elem.tags.wikidata || !!elem.tags.wikipedia,
                     })
                 }
 
-                console.log(`[LocationLabels] Filtered down to ${mapped.length} places near track.`)
+                console.log(
+                    `[LocationLabels] Filtered down to ${mapped.length} places near track.`
+                )
 
                 // Score places dynamically to balance size/importance against track proximity
                 const getRankingScore = (node: PlaceNode) => {
@@ -243,14 +325,29 @@ export function LocationLabels({
                     else if (node.type === 'town') baseScore = 80
                     else if (node.type === 'village') baseScore = 60
                     else if (node.type === 'hamlet') baseScore = 40
-                    else if (node.type === 'peak') {
+                    else if (node.type === 'lake') {
+                        const isMajor = node.osmType === 'relation' || node.hasWikidata
+                        const importanceBonus = node.hasWikidata ? 25 : 0
+                        const relationBonus = node.osmType === 'relation' ? 15 : 0
+                        baseScore = 45 + importanceBonus + relationBonus
+                        distWeight = isMajor ? 0.8 : 1.6
+                    } else if (node.type === 'peak') {
                         // Prominent peaks score higher
-                        const eleBonus = Math.min(50, (node.osmElevation || node.elevation || 1000) / 75)
+                        const eleBonus = Math.min(
+                            50,
+                            (node.osmElevation || node.elevation || 1000) / 75
+                        )
                         baseScore = 45 + eleBonus
                         // Distant major peaks should not be penalized too heavily so they stay visible
-                        distWeight = (node.osmElevation || node.elevation || 0) > 2000 ? 0.8 : 1.2
+                        distWeight =
+                            (node.osmElevation || node.elevation || 0) > 2000
+                                ? 0.8
+                                : 1.2
                     } else if (node.type === 'saddle') {
-                        const eleBonus = Math.min(15, (node.osmElevation || node.elevation || 500) / 150)
+                        const eleBonus = Math.min(
+                            15,
+                            (node.osmElevation || node.elevation || 500) / 150
+                        )
                         baseScore = 40 + eleBonus
                         distWeight = 1.2
                     } else if (node.type === 'viewpoint') {
@@ -265,7 +362,13 @@ export function LocationLabels({
 
                 // Limit total number of labels to 60 (stepped back to avoid overcrowding)
                 const finalPlaces = mapped.slice(0, 60)
-                console.log('[LocationLabels] Final places to display:', finalPlaces.map(p => `${p.name} (${p.type}, trackDist: ${(p.distanceToTrack/1000).toFixed(1)}km)`))
+                console.log(
+                    '[LocationLabels] Final places to display:',
+                    finalPlaces.map(
+                        (p) =>
+                            `${p.name} (${p.type}, trackDist: ${(p.distanceToTrack / 1000).toFixed(1)}km)`
+                    )
+                )
 
                 if (isCancelled) return
 
@@ -291,7 +394,9 @@ export function LocationLabels({
         nodes: PlaceNode[],
         isCancelled: boolean
     ) => {
-        console.log(`[LocationLabels] Resolving elevations for ${nodes.length} places...`)
+        console.log(
+            `[LocationLabels] Resolving elevations for ${nodes.length} places...`
+        )
         const updated = [...nodes]
         for (let i = 0; i < updated.length; i++) {
             if (isCancelled) return
@@ -304,7 +409,9 @@ export function LocationLabels({
                 )
                 if (isCancelled) return
 
-                console.log(`[LocationLabels] Resolved elevation for ${updated[i].name}: ${height.toFixed(1)}m`)
+                console.log(
+                    `[LocationLabels] Resolved elevation for ${updated[i].name}: ${height.toFixed(1)}m`
+                )
                 updated[i] = {
                     ...updated[i],
                     elevation: height,
@@ -355,6 +462,8 @@ function LocationLabelItem({ place }: { place: PlaceNode }) {
                 return 25 // Hug the pass closely
             case 'viewpoint':
                 return 30
+            case 'lake':
+                return 35 // Floating above water surface
             default:
                 return 30
         }
@@ -422,6 +531,14 @@ function LocationLabelItem({ place }: { place: PlaceNode }) {
                     stalkRadius: 0.7,
                     stalkColor: '#4f46e5', // Indigo-600
                 }
+            case 'lake':
+                return {
+                    bg: 'bg-sky-950/85 dark:bg-sky-955/85 border-sky-600/40 text-sky-100 font-semibold text-[10px] shadow-[0_0_8px_rgba(14,165,233,0.15)]',
+                    indicator: 'text-sky-400 font-bold mr-1 inline-block',
+                    notch: 'border-t-sky-950/85',
+                    stalkRadius: 0.7,
+                    stalkColor: '#0284c7', // Sky-600
+                }
             default:
                 return {
                     bg: 'bg-slate-900/40 dark:bg-slate-955/40 border-slate-900/40 text-slate-400 text-[9.5px]',
@@ -446,18 +563,26 @@ function LocationLabelItem({ place }: { place: PlaceNode }) {
         // Define LOD thresholds (reduced to prevent horizon clutter)
         let maxVisibleDistance = 35000 // city: 35km
         let minVisibleDistance = 0
-        if (place.type === 'town') maxVisibleDistance = 20000 // 20km
-        else if (place.type === 'village') maxVisibleDistance = 12000 // 12km
-        else if (place.type === 'hamlet') maxVisibleDistance = 6000 // 6km
+        if (place.type === 'town')
+            maxVisibleDistance = 20000 // 20km
+        else if (place.type === 'village')
+            maxVisibleDistance = 12000 // 12km
+        else if (place.type === 'hamlet')
+            maxVisibleDistance = 6000 // 6km
         else if (place.type === 'peak') {
             // Scale peak visibility based on height
-            if (place.elevation > 2000) maxVisibleDistance = 30000 // 30km
-            else if (place.elevation > 1000) maxVisibleDistance = 18000 // 18km
+            if (place.elevation > 2000)
+                maxVisibleDistance = 30000 // 30km
+            else if (place.elevation > 1000)
+                maxVisibleDistance = 18000 // 18km
             else maxVisibleDistance = 8000 // 8km
         } else if (place.type === 'saddle') {
             maxVisibleDistance = 10000 // 10km
         } else if (place.type === 'viewpoint') {
             maxVisibleDistance = 8000 // 8km
+        } else if (place.type === 'lake') {
+            const isMajor = place.osmType === 'relation' || place.hasWikidata
+            maxVisibleDistance = isMajor ? 28000 : 12000
         }
 
         const isVisible =
@@ -487,6 +612,7 @@ function LocationLabelItem({ place }: { place: PlaceNode }) {
         else if (place.type === 'peak') baseScale = 0.95
         else if (place.type === 'saddle') baseScale = 0.85
         else if (place.type === 'viewpoint') baseScale = 0.85
+        else if (place.type === 'lake') baseScale = 0.90
 
         // As distance goes from 100m to maxVisibleDistance, scale factor changes smoothly
         const t = (distance - 100) / (maxVisibleDistance - 100)
@@ -497,7 +623,7 @@ function LocationLabelItem({ place }: { place: PlaceNode }) {
         labelRef.current.style.transform = `translate(-50%, calc(-100% - 8px)) scale(${finalScale})`
 
         // Opacity fadeout when approaching the max visibility limit (starts fading at 20% distance and fades out fully to 0 at the limit)
-        const fadeThreshold = maxVisibleDistance * 0.20
+        const fadeThreshold = maxVisibleDistance * 0.2
         const opacity =
             distance > fadeThreshold
                 ? 1 -
@@ -511,10 +637,15 @@ function LocationLabelItem({ place }: { place: PlaceNode }) {
         <group ref={groupRef} position={[place.x, place.elevation, place.z]}>
             {/* Minimal vertical stalk anchor (made thicker and color-coded) */}
             <mesh ref={stalkRef} position={[0, floatHeight / 2, 0]}>
-                <cylinderGeometry args={[badgeStyles.stalkRadius, badgeStyles.stalkRadius, floatHeight, 6]} />
-                <meshBasicMaterial
-                    color={badgeStyles.stalkColor}
+                <cylinderGeometry
+                    args={[
+                        badgeStyles.stalkRadius,
+                        badgeStyles.stalkRadius,
+                        floatHeight,
+                        6,
+                    ]}
                 />
+                <meshBasicMaterial color={badgeStyles.stalkColor} />
             </mesh>
 
             {/* Projected HTML Label badge */}
@@ -541,17 +672,25 @@ function LocationLabelItem({ place }: { place: PlaceNode }) {
                         {place.type === 'viewpoint' && (
                             <span className={badgeStyles.indicator}>👁</span>
                         )}
-                        {place.type !== 'peak' && place.type !== 'saddle' && place.type !== 'viewpoint' && (
-                            <span className={badgeStyles.indicator} />
+                        {place.type === 'lake' && (
+                            <span className={badgeStyles.indicator}>💧</span>
                         )}
+                        {place.type !== 'peak' &&
+                            place.type !== 'saddle' &&
+                            place.type !== 'viewpoint' &&
+                            place.type !== 'lake' && (
+                                <span className={badgeStyles.indicator} />
+                            )}
 
                         <span className="flex items-center gap-1">
                             <span>{place.name}</span>
-                            {(place.type === 'peak' || place.type === 'saddle') && place.elevation && (
-                                <span className="text-[9px] opacity-75 font-normal ml-0.5">
-                                    {Math.round(place.elevation)}m
-                                </span>
-                            )}
+                            {(place.type === 'peak' ||
+                                place.type === 'saddle') &&
+                                place.elevation && (
+                                    <span className="text-[9px] opacity-75 font-normal ml-0.5">
+                                        {Math.round(place.elevation)}m
+                                    </span>
+                                )}
                         </span>
 
                         {/* Pointer Notch */}

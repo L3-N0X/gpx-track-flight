@@ -21,6 +21,8 @@ interface DroneFlightContextType {
     curveRef: MutableRefObject<CatmullRomCurve3 | null>
     isRecording: boolean
     setIsRecording: (recording: boolean) => void
+    isFinished: boolean
+    setIsFinished: (finished: boolean) => void
 }
 
 const DroneFlightContext = createContext<DroneFlightContextType | null>(null)
@@ -35,6 +37,7 @@ export function DroneFlightProvider({
     const [fixedSpeed, setFixedSpeed] = useState(1)
     const [trackSpeedMultiplier, setTrackSpeedMultiplier] = useState(50)
     const [isRecording, setIsRecording] = useState(false)
+    const [isFinished, setIsFinished] = useState(false)
     const progressRef = useRef(0)
     const curveRef = useRef<CatmullRomCurve3 | null>(null)
     const speed = mode === 'track-speed' ? trackSpeedMultiplier : fixedSpeed
@@ -58,8 +61,10 @@ export function DroneFlightProvider({
             curveRef,
             isRecording,
             setIsRecording,
+            isFinished,
+            setIsFinished,
         }),
-        [isPlaying, mode, speed, isRecording]
+        [isPlaying, mode, speed, isRecording, isFinished]
     )
 
     return (

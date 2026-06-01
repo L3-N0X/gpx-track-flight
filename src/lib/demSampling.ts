@@ -132,10 +132,6 @@ export async function sampleLocationElevation(
     lon: number
 ): Promise<number> {
     const tile = latLonToTileCoordinate(lat, lon, TERRARIUM_ZOOM)
-    const tileSample = await fetchElevationTile(
-        TERRARIUM_ZOOM,
-        tile.x,
-        tile.y
-    )
+    const tileSample = await fetchElevationTile(TERRARIUM_ZOOM, tile.x, tile.y)
     return sampleHeight(tileSample, lat, lon)
 }

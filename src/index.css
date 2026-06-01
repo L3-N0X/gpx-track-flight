@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Space+Grotesk:wght@400..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Roboto+Flex:opsz,wght@8..144,100..1000&family=Space+Grotesk:wght@400..700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -57,6 +57,7 @@
     --font-logo: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
     --font-heading:
         'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+    --font-roboto-flex: 'Roboto Flex', system-ui, -apple-system, sans-serif;
 }
 
 :root {
@@ -64,9 +65,9 @@
     /* Light Theme: Soft, earthy light greens/grays */
     --background: oklch(0.98 0.01 135);
     --foreground: oklch(0.25 0.02 135);
-    --card: oklch(0.99 0.005 135);
+    --card: oklch(0.99 0.005 135 / 75%);
     --card-foreground: oklch(0.25 0.02 135);
-    --popover: oklch(0.99 0.005 135);
+    --popover: oklch(0.99 0.005 135 / 75%);
     --popover-foreground: oklch(0.25 0.02 135);
 
     /* Primary: #5f9552 */
@@ -157,4 +158,10 @@
     body {
         @apply bg-background text-foreground;
     }
+}
+
+/* Sonner Toast backdrop blur & translucency support */
+.toaster [data-sonner-toast] {
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
 }
